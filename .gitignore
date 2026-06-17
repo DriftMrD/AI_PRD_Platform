@@ -1,0 +1,48 @@
+# WorkBuddy 本地工作区
+.workbuddy/
+.buddy/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+tmp/
+temp/
+.tmp/
+.cache/
+
+# 敏感/构建产物
+dist/
+build/
+*.spec
+
+# 任务文件（含内部信息，已 gitignored）
+prd-forge-backend/TASKS.json

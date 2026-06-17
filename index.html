@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRD Forge - 智能需求生成平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-primary-50: #eff6ff;
+      --color-primary-100: #dbeafe;
+      --color-primary-200: #bfdbfe;
+      --color-primary-300: #93c5fd;
+      --color-primary-400: #60a5fa;
+      --color-primary-500: #3b82f6;
+      --color-primary-600: #2563eb;
+      --color-primary-700: #1d4ed8;
+      --color-primary-800: #1e40af;
+      --color-primary-900: #1e3a8a;
+
+      --color-navy-50: #f0f4f8;
+      --color-navy-100: #d9e2ec;
+      --color-navy-200: #bcccdc;
+      --color-navy-300: #9fb3c8;
+      --color-navy-400: #829ab1;
+      --color-navy-500: #627d98;
+      --color-navy-600: #486581;
+      --color-navy-700: #334e68;
+      --color-navy-800: #243b53;
+      --color-navy-900: #102a43;
+
+      --color-success: #10b981;
+      --color-warning: #f59e0b;
+      --color-error: #ef4444;
+      --color-info: #3b82f6;
+
+      --bg-body: #f7f8fa;
+      --bg-card: #ffffff;
+      --bg-elevated: #ffffff;
+      --border-color: #e2e8f0;
+      --border-light: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --text-inverse: #ffffff;
+
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-body);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ========== HEADER ========== */
+    .header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      background-color: rgba(255, 255, 255, 0.92);
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-800));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .brand-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-navy-900);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: 4px;
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-link {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: all var(--transition-fast);
+      font-weight: 500;
+    }
+
+    .nav-link:hover {
+      color: var(--color-primary-600);
+      background: var(--color-primary-50);
+    }
+
+    .nav-link.active {
+      color: var(--color-primary-700);
+      background: var(--color-primary-50);
+    }
+
+    /* ========== MAIN LAYOUT ========== */
+    .main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--color-navy-900);
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+
+    .page-desc {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ========== INPUT CARD ========== */
+    .input-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      transition: box-shadow var(--transition-normal);
+    }
+
+    .input-card:hover {
+      box-shadow: var(--shadow-xl);
+    }
+
+    .card-header {
+      padding: 24px 28px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--color-primary-50);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-title-icon svg {
+      width: 15px;
+      height: 15px;
+      color: var(--color-primary-600);
+    }
+
+    /* Upload Trigger Button (in card header) */
+    .upload-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      font-family: inherit;
+    }
+
+    .upload-trigger:hover {
+      border-color: var(--color-primary-300);
+      color: var(--color-primary-600);
+      background: var(--color-primary-50);
+    }
+
+    .upload-trigger svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    /* ========== TEXT INPUT AREA ========== */
+    .input-body {
+      padding: 20px 28px;
+    }
+
+    .textarea-wrap {
+      position: relative;
+    }
+
+    .main-textarea {
+      width: 100%;
+      min-height: 200px;
+      max-height: 400px;
+      padding: 16px 18px;
+      border: 1.5px solid var(--border-color);
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-primary);
+      background: var(--bg-body);
+      resize: vertical;
+      transition: all var(--transition-fast);
+      font-family: inherit;
+    }
+
+    .main-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .main-textarea:focus {
+      outline: none;
+      border-color: var(--color-primary-400);
+      background: var(--bg-card);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .textarea-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding: 0 4px;
+    }
+
+    .char-count {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .quick-btn {
+      padding: 5px 12px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      font-family: inherit;
+      font-weight: 500;
+    }
+
+    .quick-btn:hover {
+      border-color: var(--color-primary-300);
+      color: var(--color-primary-600);
+      background: var(--color-primary-50);
+    }
+
+    /* ========== DROPZONE OVERLAY (in-textarea) ========== */
+    .dropzone-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(239, 246, 255, 0.92);
+      backdrop-filter: blur(4px);
+      border: 2px dashed var(--color-primary-400);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition-fast);
+      z-index: 5;
+    }
+
+    .dropzone-overlay.show {
+      opacity: 1;
+    }
+
+    .dropzone-overlay-content {
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .dropzone-overlay-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 10px;
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .dropzone-overlay-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--color-primary-500);
+    }
+
+    .dropzone-overlay-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-primary-700);
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    /* ========== INLINE FILE CHIPS ========== */
+    .inline-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .inline-files:empty {
+      margin-top: 0;
+    }
+
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px 6px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--text-primary);
+      max-width: 280px;
+      transition: all var(--transition-fast);
+      animation: chipIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes chipIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .file-chip:hover {
+      border-color: var(--color-primary-300);
+    }
+
+    .file-chip-icon {
+      width: 20px;
+      height: 20px;
+      background: var(--color-primary-50);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .file-chip-icon svg {
+      width: 11px;
+      height: 11px;
+      color: var(--color-primary-600);
+    }
+
+    .file-chip-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+    }
+
+    .file-chip-size {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 400;
+      flex-shrink: 0;
+    }
+
+    .file-chip-remove {
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+      flex-shrink: 0;
+    }
+
+    .file-chip-remove:hover {
+      background: var(--color-error);
+      color: white;
+    }
+
+    .file-chip-remove svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    .format-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+
+    @media (max-width: 640px) {
+      .format-hint { display: none; }
+    }
+
+    /* ========== OPTIONS ========== */
+    .options-section {
+      border-top: 1px solid var(--border-light);
+      padding: 20px 28px;
+    }
+
+    .options-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .options-toggle-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .options-toggle-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--text-muted);
+      transition: transform var(--transition-normal);
+    }
+
+    .options-toggle-icon.open {
+      transform: rotate(180deg);
+    }
+
+    .options-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height var(--transition-slow), opacity var(--transition-normal);
+      opacity: 0;
+    }
+
+    .options-content.open {
+      max-height: 500px;
+      opacity: 1;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding-top: 20px;
+    }
+
+    .option-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .option-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .option-select {
+      padding: 10px 14px;
+      border: 1.5px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      color: var(--text-primary);
+      background: var(--bg-body);
+      font-family: inherit;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .option-select:focus {
+      outline: none;
+      border-color: var(--color-primary-400);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    /* ========== SUBMIT ========== */
+    .submit-section {
+      padding: 0 28px 28px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 14px 24px;
+      border: none;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-700));
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+    }
+
+    .submit-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .submit-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ========== RESULT ========== */
+    .result-card {
+      margin-top: 24px;
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: none;
+    }
+
+    .result-card.show {
+      display: block;
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .result-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .result-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .result-title .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--color-success);
+      border-radius: 50%;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .result-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      font-family: inherit;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .result-btn:hover {
+      border-color: var(--color-primary-300);
+      color: var(--color-primary-600);
+    }
+
+    .result-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .result-body {
+      padding: 24px 28px;
+    }
+
+    .result-content {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    /* ========== FOOTER ========== */
+    .footer {
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* ========== TOAST ========== */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 18px;
+      background: var(--color-navy-900);
+      color: white;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-xl);
+      animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast.error {
+      background: var(--color-error);
+    }
+
+    .toast.success {
+      background: var(--color-success);
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .toast-out {
+      animation: toastOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes toastOut {
+      to {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 640px) {
+      .main {
+        padding: 24px 16px 60px;
+      }
+
+      .page-title {
+        font-size: 24px;
+      }
+
+      .input-body,
+      .options-section,
+      .submit-section {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      .card-header {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header-inner {
+        padding: 0 16px;
+      }
+
+      .nav-link {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">PF</div>
+        <div>
+          <span class="brand-text">PRD Forge</span>
+          <span class="brand-sub">智能需求生成平台</span>
+        </div>
+      </div>
+      <nav class="header-nav">
+        <a href="#" class="nav-link active">新建需求</a>
+        <a href="#" class="nav-link">历史记录</a>
+        <a href="#" class="nav-link">模板管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="page-header">
+      <h1 class="page-title">描述你的产品需求</h1>
+      <p class="page-desc">输入想法或上传文档，AI 将为你生成专业的 PRD 文档</p>
+    </div>
+
+    <!-- Input Card -->
+    <div class="input-card">
+      <!-- Card Header -->
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          需求输入
+        </div>
+        <button class="upload-trigger" id="uploadTrigger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          上传文件
+        </button>
+        <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.doc,.docx,.md,.txt,.png,.jpg,.jpeg,.webp">
+      </div>
+
+      <!-- Unified Input Body -->
+      <div class="input-body">
+        <div class="textarea-wrap" id="textareaWrap">
+          <textarea
+            class="main-textarea"
+            id="mainInput"
+            placeholder="请描述你的产品需求，例如：&#10;&#10;我想做一个在线文档协作工具，支持多人实时编辑、评论、版本历史。目标用户是中小型团队的产品经理和设计师...&#10;&#10;你也可以直接把文件拖到这里上传"
+          ></textarea>
+
+          <!-- Inline file chips (appear when files added) -->
+          <div class="inline-files" id="inlineFiles"></div>
+
+          <!-- Dropzone overlay (appears when dragging files) -->
+          <div class="dropzone-overlay" id="dropzoneOverlay">
+            <div class="dropzone-overlay-content">
+              <div class="dropzone-overlay-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div class="dropzone-overlay-text">松开鼠标上传文件</div>
+            </div>
+          </div>
+        </div>
+        <div class="textarea-footer">
+          <span class="char-count"><span id="charCount">0</span> 字</span>
+          <div class="quick-actions">
+            <span class="format-hint">支持 PDF / Word / Markdown / TXT / 图片 · ≤ 20MB</span>
+            <button class="quick-btn" onclick="insertTemplate()">插入模板</button>
+            <button class="quick-btn" onclick="clearInput()">清空</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="options-section">
+        <div class="options-toggle" id="optionsToggle">
+          <span class="options-toggle-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            生成配置
+          </span>
+          <svg class="options-toggle-icon" id="optionsToggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </div>
+        <div class="options-content" id="optionsContent">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label">PRD 模板</label>
+              <select class="option-select" id="templateSelect">
+                <option value="standard">标准 PRD 模板</option>
+                <option value="agile">敏捷开发模板</option>
+                <option value="detailed">详细功能规格书</option>
+                <option value="onepage">单页 PRD</option>
+              </select>
+            </div>
+            <div class="option-group">
+              <label class="option-label">输出语言</label>
+              <select class="option-select" id="languageSelect">
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+                <option value="bilingual">中英双语</option>
+              </select>
+            </div>
+            <div class="option-group">
+              <label class="option-label">详细程度</label>
+              <select class="option-select" id="detailSelect">
+                <option value="concise">简洁</option>
+                <option value="standard" selected>标准</option>
+                <option value="detailed">详细</option>
+                <option value="exhaustive">极致详细</option>
+              </select>
+            </div>
+            <div class="option-group">
+              <label class="option-label">目标角色</label>
+              <select class="option-select" id="roleSelect">
+                <option value="pm">产品经理</option>
+                <option value="designer">设计师</option>
+                <option value="developer">开发人员</option>
+                <option value="stakeholder">项目干系人</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-section">
+        <button class="submit-btn" id="submitBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          生成 PRD 文档
+        </button>
+      </div>
+    </div>
+
+    <!-- Result Card -->
+    <div class="result-card" id="resultCard">
+      <div class="result-header">
+        <div class="result-title">
+          <span class="dot"></span>
+          生成的 PRD 文档
+        </div>
+        <div class="result-actions">
+          <button class="result-btn" id="copyBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            复制
+          </button>
+          <button class="result-btn" id="downloadBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            下载
+          </button>
+        </div>
+      </div>
+      <div class="result-body">
+        <pre class="result-content" id="resultContent"></pre>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>PRD Forge - 让需求文档撰写更高效</p>
+    </footer>
+  </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // ========== TEXT INPUT ==========
+    const mainInput = document.getElementById('mainInput');
+    const charCount = document.getElementById('charCount');
+    const textareaWrap = document.getElementById('textareaWrap');
+    const dropzoneOverlay = document.getElementById('dropzoneOverlay');
+
+    mainInput.addEventListener('input', () => {
+      charCount.textContent = mainInput.value.length;
+    });
+
+    function insertTemplate() {
+      const template = `## 产品背景
+\n请描述产品的业务背景、目标用户群体以及要解决的核心问题。\n\n## 产品目标\n\n1. \n2. \n3. \n\n## 功能需求\n\n### 功能一：\n- 需求描述：\n- 验收标准：\n\n### 功能二：\n- 需求描述：\n- 验收标准：\n\n## 非功能需求\n\n- 性能：\n- 安全：\n- 兼容性：`;
+      mainInput.value = template;
+      charCount.textContent = mainInput.value.length;
+      mainInput.focus();
+      showToast('已插入模板，请按需填写', 'success');
+    }
+
+    function clearInput() {
+      mainInput.value = '';
+      uploadedFiles = [];
+      renderFileChips();
+      charCount.textContent = '0';
+      showToast('已清空输入', 'success');
+    }
+
+    // ========== FILE UPLOAD (unified with textarea) ==========
+    const uploadTrigger = document.getElementById('uploadTrigger');
+    const fileInput = document.getElementById('fileInput');
+    const inlineFiles = document.getElementById('inlineFiles');
+    let uploadedFiles = [];
+
+    uploadTrigger.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      handleFiles(e.target.files);
+      e.target.value = ''; // 允许重复选择同一文件
+    });
+
+    // 全局拖拽 → 在输入框上显示 overlay
+    let dragCounter = 0;
+    document.addEventListener('dragenter', (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        dragCounter++;
+        dropzoneOverlay.classList.add('show');
+      }
+    });
+    document.addEventListener('dragleave', (e) => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropzoneOverlay.classList.remove('show');
+      }
+    });
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropzoneOverlay.classList.remove('show');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        if (file.size > 20 * 1024 * 1024) {
+          showToast(`文件 ${file.name} 超过 20MB 限制`, 'error');
+          return;
+        }
+        // 避免重复
+        if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
+          showToast(`文件 ${file.name} 已存在`, 'error');
+          return;
+        }
+        uploadedFiles.push(file);
+      });
+      renderFileChips();
+      if (files.length > 0) {
+        showToast(`已添加 ${files.length} 个文件`, 'success');
+      }
+    }
+
+    function renderFileChips() {
+      inlineFiles.innerHTML = uploadedFiles.map((file, index) => `
+        <div class="file-chip">
+          <div class="file-chip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <span class="file-chip-name">${escapeHtml(file.name)}</span>
+          <span class="file-chip-size">${formatSize(file.size)}</span>
+          <button class="file-chip-remove" onclick="removeFile(${index})" title="移除">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function removeFile(index) {
+      uploadedFiles.splice(index, 1);
+      renderFileChips();
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ========== OPTIONS TOGGLE ==========
+    const optionsToggle = document.getElementById('optionsToggle');
+    const optionsContent = document.getElementById('optionsContent');
+    const optionsToggleIcon = document.getElementById('optionsToggleIcon');
+
+    optionsToggle.addEventListener('click', () => {
+      optionsContent.classList.toggle('open');
+      optionsToggleIcon.classList.toggle('open');
+    });
+
+    // ========== SUBMIT ==========
+    const submitBtn = document.getElementById('submitBtn');
+    const resultCard = document.getElementById('resultCard');
+    const resultContent = document.getElementById('resultContent');
+
+    submitBtn.addEventListener('click', async () => {
+      // 验证输入
+      const hasText = mainInput.value.trim().length > 0;
+      const hasFiles = uploadedFiles.length > 0;
+
+      if (!hasText && !hasFiles) {
+        showToast('请输入需求内容或上传文件', 'error');
+        return;
+      }
+
+      // 显示加载状态
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner"></div> 正在生成 PRD...';
+
+      // 模拟生成过程（实际应调用后端API）
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 获取配置
+      const template = document.getElementById('templateSelect').value;
+      const language = document.getElementById('languageSelect').value;
+      const detail = document.getElementById('detailSelect').value;
+      const role = document.getElementById('roleSelect').value;
+
+      // 模拟生成结果
+      const mockResult = generateMockPRD(template, language, detail, role);
+
+      resultContent.textContent = mockResult;
+      resultCard.classList.add('show');
+      resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        生成 PRD 文档
+      `;
+
+      showToast('PRD 文档生成成功！', 'success');
+    });
+
+    function generateMockPRD(template, language, detail, role) {
+      const templates = {
+        standard: `## 1. 文档信息
+
+| 项目 | 内容 |
+|------|------|
+| 文档版本 | v1.0 |
+| 撰写日期 | ${new Date().toLocaleDateString('zh-CN')} |
+| 撰写人 | PRD Forge AI |
+| 评审状态 | 待评审 |
+
+## 2. 产品概述
+
+### 2.1 产品背景
+基于用户输入的需求描述，该产品旨在解决目标用户在特定场景下的核心痛点，通过技术手段提升效率或体验。
+
+### 2.2 产品目标
+1. 解决用户核心痛点，提升关键指标
+2. 建立可持续的产品价值闭环
+3. 在目标市场建立竞争优势
+
+### 2.3 目标用户
+- 主要用户群体：产品经理、设计师、开发工程师
+- 用户画像：需要高效产出标准化文档的互联网从业者
+- 使用场景：需求分析、产品规划、团队协作
+
+## 3. 功能需求
+
+### 3.1 核心功能模块
+
+#### 模块一：多模态输入
+- **需求描述**：支持文本、文件、语音三种输入方式
+- **验收标准**：
+  - 文本输入支持实时字数统计
+  - 文件上传支持拖拽和点击，限制 20MB
+  - 语音录制最长 5 分钟，支持中文识别
+
+#### 模块二：智能生成
+- **需求描述**：基于 AI 模型自动生成标准化 PRD 文档
+- **验收标准**：
+  - 生成结果符合选定模板规范
+  - 支持多种输出语言
+  - 生成时间不超过 30 秒
+
+#### 模块三：文档导出
+- **需求描述**：支持复制和下载生成的 PRD
+- **验收标准**：
+  - 支持 Markdown 格式导出
+  - 支持 Word 格式导出
+  - 复制内容保留完整格式
+
+## 4. 非功能需求
+
+### 4.1 性能要求
+- 页面加载时间 < 2 秒
+- 文件上传进度实时显示
+- 生成过程有加载状态提示
+
+### 4.2 安全要求
+- 用户上传文件临时存储，生成后自动清理
+- 敏感内容过滤与提示
+- 数据传输采用 HTTPS 加密
+
+### 4.3 兼容性要求
+- 支持 Chrome、Firefox、Safari、Edge 最新两个版本
+- 响应式设计，适配桌面端和移动端
+- 支持主流操作系统`,
+
+        agile: `## 产品待办列表 (Product Backlog)
+
+### 史诗 (Epic): 智能 PRD 生成平台
+
+---
+
+### 用户故事 1: 作为产品经理，我希望通过文本输入需求，以便快速生成 PRD 文档
+
+**验收标准:**
+- [ ] 提供多行文本输入框，最小高度 200px
+- [ ] 支持字数统计（实时显示）
+- [ ] 提供常用模板快速插入
+- [ ] 生成后的 PRD 结构清晰，符合行业标准
+
+**故事点:** 8
+**优先级:** P0
+
+---
+
+### 用户故事 2: 作为产品经理，我希望上传现有文档，以便 AI 基于文档内容生成 PRD
+
+**验收标准:**
+- [ ] 支持拖拽上传和点击上传
+- [ ] 支持 PDF、Word、Markdown、TXT、图片格式
+- [ ] 单文件最大 20MB
+- [ ] 上传后可预览文件名和大小
+- [ ] 支持删除已上传文件
+
+**故事点:** 5
+**优先级:** P0
+
+---
+
+### 用户故事 3: 作为产品经理，我希望通过语音描述需求，以便在不方便打字时也能使用
+
+**验收标准:**
+- [ ] 提供明显的录音按钮
+- [ ] 录音时有明显的视觉反馈（动画、计时器）
+- [ ] 最长录制 5 分钟
+- [ ] 支持中文语音识别
+- [ ] 录音结束自动停止或手动停止
+
+**故事点:** 8
+**优先级:** P1
+
+---
+
+### Sprint 规划
+
+**Sprint 1 (2周):**
+- 用户故事 1 (文本输入)
+- 基础 UI 框架搭建
+
+**Sprint 2 (2周):**
+- 用户故事 2 (文件上传)
+- 用户故事 3 (语音输入)
+- 后端 API 集成`,
+
+        detailed: `## 1. 文档控制信息
+
+### 1.1 版本历史
+
+| 版本 | 日期 | 修改人 | 修改内容 |
+|------|------|--------|----------|
+| v0.1 | ${new Date().toLocaleDateString('zh-CN')} | PRD Forge | 初始版本创建 |
+
+### 1.2 审批记录
+
+| 角色 | 姓名 | 签字 | 日期 |
+|------|------|------|------|
+| 产品负责人 | | | |
+| 技术负责人 | | | |
+| 设计负责人 | | | |
+
+### 1.3 术语表
+
+| 术语 | 定义 |
+|------|------|
+| PRD | Product Requirements Document，产品需求文档 |
+| AI | Artificial Intelligence，人工智能 |
+| API | Application Programming Interface，应用程序接口 |
+
+## 2. 产品战略
+
+### 2.1 市场分析
+当前市场上缺乏针对中文产品经理的智能化 PRD 生成工具。现有工具要么过于简单（如通用 AI 聊天），要么过于复杂（如专业文档软件）。本产品定位在两者之间，提供专门优化的 PRD 生成体验。
+
+### 2.2 竞争分析
+
+| 竞品 | 优势 | 劣势 | 我们的差异化 |
+|------|------|------|-------------|
+| 通用 AI 聊天 | 灵活 | 输出不规范 | 标准化模板 |
+| 传统文档工具 | 功能全 | 无 AI 能力 | 智能生成 |
+| 竞品 A | ... | ... | ... |
+
+### 2.3 商业模式
+- 基础功能免费
+- 高级模板和批量处理付费
+- 企业版支持团队协作和私有化部署
+
+## 3. 详细功能规格
+
+### 3.1 功能架构图
+
+[前端界面] --> [输入处理层] --> [AI 引擎] --> [模板渲染层] --> [输出]
+
+### 3.2 功能详细设计
+
+#### 3.2.1 多模态输入模块
+
+**功能编号:** FUNC-001
+**功能名称:** 多模态需求输入
+**优先级:** P0
+**状态:** 已规划
+
+**3.2.1.1 功能描述**
+提供统一的输入入口，支持文本、文件、语音三种方式录入需求信息。
+
+**3.2.1.2 输入/输出**
+
+输入:
+- 文本: 字符串，最大 10000 字符
+- 文件: 二进制流，支持格式见 3.2.1.3
+- 语音: 音频流，WAV/MP3 格式
+
+输出:
+- 结构化需求数据 (JSON)
+
+**3.2.1.3 业务规则**
+1. 文件格式限制: PDF, DOC, DOCX, MD, TXT, PNG, JPG, JPEG, WEBP
+2. 文件大小限制: 单个文件 <= 20MB
+3. 语音时长限制: <= 300 秒
+4. 同时只能使用一种输入模式
+
+**3.2.1.4 界面原型**
+- 顶部模式切换 Tab (文本/文件/语音)
+- 文本模式: 大文本框 + 字数统计 + 快捷操作
+- 文件模式: 拖拽区域 + 文件列表
+- 语音模式: 圆形录音按钮 + 计时器
+
+**3.2.1.5 异常处理**
+
+| 异常场景 | 处理方式 |
+|----------|----------|
+| 文件格式不支持 | Toast 提示，不上传 |
+| 文件超过大小限制 | Toast 提示，不上传 |
+| 麦克风权限拒绝 | Toast 提示引导用户开启权限 |
+| 网络中断 | 本地缓存，恢复后自动重试 |
+
+**3.2.1.6 性能要求**
+- 文件上传: 显示进度条，支持断点续传
+- 语音识别: 实时转写，延迟 < 2 秒
+
+#### 3.2.2 智能生成模块
+
+**功能编号:** FUNC-002
+**功能名称:** AI PRD 生成
+**优先级:** P0
+
+**3.2.2.1 处理流程**
+1. 输入预处理（格式转换、内容提取）
+2. 需求理解（NLP 分析核心需求点）
+3. 模板匹配（根据配置选择模板）
+4. 内容生成（LLM 生成各章节内容）
+5. 后处理（格式化、校验、优化）
+
+**3.2.2.2 模板系统**
+
+| 模板名称 | 适用场景 | 章节结构 |
+|----------|----------|----------|
+| 标准 PRD | 常规产品开发 | 概述/需求/设计/计划 |
+| 敏捷模板 | 敏捷团队 | Backlog/用户故事/验收标准 |
+| 详细规格 | 复杂系统 | 战略/架构/详细设计/测试 |
+| 单页 PRD | 快速验证 | 一页纸概括 |
+
+## 4. 数据需求
+
+### 4.1 数据模型
+
+**用户输入表 (user_inputs)**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID | 主键 |
+| user_id | UUID | 用户ID |
+| input_type | ENUM | text/file |
+| content | TEXT | 文本内容或文件路径 |
+| config | JSON | 生成配置 |
+| created_at | TIMESTAMP | 创建时间 |
+
+## 5. 附录
+
+### 5.1 参考文档
+- 行业 PRD 最佳实践
+- 公司文档规范 v2.0
+
+### 5.2 联系方式
+- 产品负责人: product@company.com
+- 技术支持: tech@company.com`,
+
+        onepage: `# 产品需求文档 (PRD)
+
+## 一句话描述
+一个帮助产品经理通过文本、文件或语音输入，自动生成标准化 PRD 文档的 AI 平台。
+
+---
+
+## 目标用户
+产品经理、产品助理、创业者（需要快速产出需求文档的人）
+
+## 解决什么问题
+写 PRD 耗时耗力、格式不统一、质量参差不齐
+
+## 核心价值主张
+**5 分钟输入 → 1 秒生成 → 专业级 PRD**
+
+---
+
+## 核心功能
+
+| 功能 | 说明 | 优先级 |
+|------|------|--------|
+| 文本输入 | 大文本框，支持模板插入 | P0 |
+| 文件上传 | 拖拽上传，支持多种格式 | P0 |
+| 语音输入 | 录音转文字，最长5分钟 | P1 |
+| 模板选择 | 标准/敏捷/详细/单页 | P0 |
+| 智能生成 | AI 生成完整 PRD | P0 |
+| 导出下载 | Markdown/Word 格式 | P1 |
+
+## 成功指标
+- 生成准确率 > 90%
+- 用户满意度 > 4.5/5
+- 平均生成时间 < 30 秒
+
+## 风险与假设
+- 假设：用户愿意接受 AI 生成的初版 PRD
+- 风险：AI 理解偏差导致生成内容不准确 → 提供编辑和重新生成功能`
+      };
+
+      const detailLevels = {
+        concise: '（精简版）',
+        standard: '',
+        detailed: '（详细版）',
+        exhaustive: '（完整版）'
+      };
+
+      const langPrefix = {
+        zh: '',
+        en: '[English Version]\n\n',
+        bilingual: '[中英双语]\n\n'
+      };
+
+      return langPrefix[language] + templates[template] + '\n\n---\n生成配置: ' + detailLevels[detail] + ' | 目标读者: ' + role;
+    }
+
+    // ========== RESULT ACTIONS ==========
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(resultContent.textContent).then(() => {
+        showToast('已复制到剪贴板', 'success');
+      });
+    });
+
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const blob = new Blob([resultContent.textContent], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PRD_${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('已开始下载', 'success');
+    });
+
+    // ========== TOAST ==========
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('toast-out');
+        toast.addEventListener('animationend', () => toast.remove());
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
