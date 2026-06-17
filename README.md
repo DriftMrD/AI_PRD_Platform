@@ -106,6 +106,7 @@ https://driftmrd.github.io/AI_PRD_Platform/?api=https://your-backend.example.com
 - 后端需求：[docs/PRD-backend.md](docs/PRD-backend.md)
 - PRD 模板：[prd-template.md](prd-template.md)
 - 转换规则：[SKILL.md](SKILL.md)
+- **线上部署**：[DEPLOY.md](DEPLOY.md) ← 后端到 Render + key 安全注入
 
 ## License
 

@@ -1,0 +1,46 @@
+# Render Blueprint：https://render.com/docs/blueprint-spec
+# 一键部署：Render 控制台 → New → Blueprint → 选本仓库 → 它会读这个文件
+#
+# 部署后必须手动填 LLM_API_KEY：
+#   Render Dashboard → prd-forge-backend → Environment → Add Secret
+#   Key:   LLM_API_KEY
+#   Value: sk-你的-key
+# 填完点 Save → 自动重启生效
+#
+# 部署成功后会得到一个 https://xxx.onrender.com 域名，
+# 前端用法：https://driftmrd.github.io/AI_PRD_Platform/?api=https://xxx.onrender.com
+
+services:
+  - type: web
+    name: prd-forge-backend
+    runtime: python
+    rootDir: prd-forge-backend
+    plan: free                 # 免费层（会 sleep，30-50s 冷启动）
+    region: oregon             # 离国内近一点
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    autoDeploy: true           # push 到 main 自动部署
+
+    envVars:
+      # === 公开配置（可写进 yaml 但仍建议在 Dashboard 改） ===
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BASE_URL
+        value: https://api.deepseek.com/v1
+      - key: LLM_MODEL
+        value: deepseek-chat
+      - key: LLM_TIMEOUT_S
+        value: "180"
+      - key: LLM_FIRST_TOKEN_TIMEOUT_S
+        value: "30"
+      - key: MAX_FILE_SIZE_MB
+        value: "20"
+      - key: MAX_FILE_CHARS
+        value: "50000"
+      - key: CORS_ORIGINS
+        value: "https://driftmrd.github.io,http://localhost:5173,http://localhost:8000"
+
+      # === 敏感配置：sync: false 表示从 Dashboard 读取，绝不写在这里 ===
+      - key: LLM_API_KEY
+        sync: false

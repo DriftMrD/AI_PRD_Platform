@@ -1,0 +1,5 @@
+# 后端专属：API key 等敏感信息，绝不能进 git
+# （仓库根 .gitignore 也兜底了一层）
+.env
+.env.local
+.env.*.local
