@@ -28,19 +28,62 @@ AI_PRD_Platform/
 
 ## 快速开始
 
-### 后端
+### 1. 启动后端
 
 ```bash
 cd prd-forge-backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # 填入 LLM_API_KEY
+cp .env.example .env
+```
+
+编辑 `prd-forge-backend/.env`，填入你的 LLM 配置：
+
+```bash
+# DeepSeek（OpenAI 兼容协议，国内直连）
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-你的-key
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+
+# 其他 OpenAI 兼容服务（OpenAI / 智谱 / Moonshot / Ollama 等）
+# LLN_BASE_URL=https://api.openai.com/v1
+# LLM_MODEL=gpt-4o-mini
+```
+
+启动：
+
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 前端
+健康检查：`curl http://127.0.0.1:8000/` → `{"status":"ok"}`
 
-直接用浏览器打开 `index.html`（或起静态服务器），配置后端地址即可。
+### 2. 打开前端
+
+直接用浏览器打开 `index.html`，或在仓库根目录起一个静态服务器：
+
+```bash
+cd ..  # 回到仓库根
+python -m http.server 5173
+# 浏览器访问 http://localhost:5173/
+```
+
+**默认行为**：
+
+| 访问方式 | 后端地址 | 说明 |
+|---|---|---|
+| `http://localhost:5173/` | `http://localhost:8000` | 自动检测 localhost，连本地后端 |
+| `http://127.0.0.1:5173/` | `http://127.0.0.1:8000` | 同上 |
+| GitHub Pages (`driftmrd.github.io/...`) | mock 模式 | 默认走假数据演示 |
+
+**显式指定后端地址**（推荐用于 GitHub Pages）：
+
+```
+https://driftmrd.github.io/AI_PRD_Platform/?api=https://your-backend.example.com
+```
+
+只要后端 `CORS_ORIGINS` 里包含 `https://driftmrd.github.io` 即可跨域。
 
 ## 技术栈
 

@@ -1154,51 +1154,172 @@
       optionsToggleIcon.classList.toggle('open');
     });
 
+    // ========== BACKEND CONFIG ==========
+    // 后端 base URL：本地开发用 http://localhost:8000；生产可在 ?api=xxx 覆盖
+    // 注意：浏览器 fetch 不允许跨域带自定义头，但 multipart + SSE 走标准协议可解 CORS
+    function getApiBase() {
+      const q = new URLSearchParams(location.search).get('api');
+      if (q) return q.replace(/\/+$/, '');
+      // 1) 同源代理：GitHub Pages 不能直连任意后端，部署时用 ?api= 注入
+      // 2) 本地开发：直接连 8000
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+      }
+      return '';   // 空字符串 → 走 mock 模式
+    }
+    const API_BASE = getApiBase();
+
     // ========== SUBMIT ==========
     const submitBtn = document.getElementById('submitBtn');
     const resultCard = document.getElementById('resultCard');
     const resultContent = document.getElementById('resultContent');
+    const resultTitle = document.querySelector('.result-title');
+
+    const SUBMIT_LABEL = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      生成 PRD 文档`;
 
     submitBtn.addEventListener('click', async () => {
-      // 验证输入
       const hasText = mainInput.value.trim().length > 0;
       const hasFiles = uploadedFiles.length > 0;
-
       if (!hasText && !hasFiles) {
         showToast('请输入需求内容或上传文件', 'error');
         return;
       }
 
-      // 显示加载状态
+      // 锁定按钮
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<div class="spinner"></div> 正在生成 PRD...';
 
-      // 模拟生成过程（实际应调用后端API）
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // 获取配置
-      const template = document.getElementById('templateSelect').value;
-      const language = document.getElementById('languageSelect').value;
-      const detail = document.getElementById('detailSelect').value;
-      const role = document.getElementById('roleSelect').value;
-
-      // 模拟生成结果
-      const mockResult = generateMockPRD(template, language, detail, role);
-
-      resultContent.textContent = mockResult;
+      // 准备结果区
+      resultContent.textContent = '';
       resultCard.classList.add('show');
-      resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--color-warning)"></span> 正在生成…';
 
+      // 取配置
+      const cfg = {
+        text: mainInput.value,
+        template: document.getElementById('templateSelect').value,
+        language: document.getElementById('languageSelect').value,
+        detail: document.getElementById('detailSelect').value,
+        role: document.getElementById('roleSelect').value,
+      };
+
+      // 决定走真后端还是 mock
+      if (!API_BASE) {
+        // 回退：mock（保底体验）
+        await new Promise(r => setTimeout(r, 1500));
+        resultContent.textContent = generateMockPRD(cfg.template, cfg.language, cfg.detail, cfg.role);
+        if (resultTitle) resultTitle.innerHTML = '<span class="dot"></span> 生成的 PRD 文档（演示数据）';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = SUBMIT_LABEL;
+        showToast('当前为演示模式：用 ?api= 传入后端地址启用真实生成', 'info');
+        return;
+      }
+
+      // 构造 FormData
+      const fd = new FormData();
+      fd.append('text', cfg.text);
+      fd.append('template', cfg.template);
+      fd.append('language', cfg.language);
+      fd.append('detail', cfg.detail);
+      fd.append('role', cfg.role);
+      uploadedFiles.forEach(f => fd.append('files', f, f.name));
+
+      let response;
+      try {
+        response = await fetch(API_BASE + '/api/generate', { method: 'POST', body: fd });
+      } catch (e) {
+        finishWithError(`无法连接后端 ${API_BASE}：${e.message}`);
+        return;
+      }
+      if (!response.ok || !response.body) {
+        finishWithError(`后端返回 ${response.status} ${response.statusText}`);
+        return;
+      }
+      if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+        finishWithError('后端未返回 SSE 流，请检查 CORS / 路由');
+        return;
+      }
+
+      // 解析 SSE
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let totalChars = 0;
+      let gotAnyChunk = false;
+
+      const handleEvent = (raw) => {
+        // 解析形如  "event: chunk\ndata: {...}\n\n"
+        const lines = raw.split('\n');
+        let eventName = 'message';
+        let dataLines = [];
+        for (const ln of lines) {
+          if (ln.startsWith('event:')) eventName = ln.slice(6).trim();
+          else if (ln.startsWith('data:')) dataLines.push(ln.slice(5).trim());
+          else if (ln === '') {
+            if (!dataLines.length) continue;
+            const dataStr = dataLines.join('\n');
+            dataLines = [];
+            let payload = {};
+            try { payload = JSON.parse(dataStr); } catch { /* ignore */ }
+            if (eventName === 'chunk' && payload.delta) {
+              resultContent.textContent += payload.delta;
+              totalChars += payload.delta.length;
+              gotAnyChunk = true;
+            } else if (eventName === 'progress' && payload.message) {
+              if (resultTitle) resultTitle.innerHTML = `<span class="dot" style="background:var(--color-warning)"></span> ${escapeHtml(payload.message)}`;
+            } else if (eventName === 'error') {
+              finishWithError(payload.message || payload.code || '后端错误');
+              throw new Error('__SSE_ERROR__');   // 跳出循环
+            } else if (eventName === 'done') {
+              // 结束标志在外层 buffer 为空时统一处理
+            }
+          }
+        }
+      };
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          // 按 \n\n 切分完整事件
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const raw = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            if (raw.trim()) handleEvent(raw);
+          }
+        }
+        // 收尾剩余
+        if (buffer.trim()) handleEvent(buffer);
+      } catch (e) {
+        if (e.message !== '__SSE_ERROR__') {
+          finishWithError('流读取中断：' + e.message);
+          return;
+        }
+        return;   // 错误已处理
+      }
+
+      if (!gotAnyChunk) {
+        finishWithError('后端没有返回任何内容');
+        return;
+      }
+      if (resultTitle) resultTitle.innerHTML = `<span class="dot"></span> 生成的 PRD 文档（${totalChars} 字）`;
       submitBtn.disabled = false;
-      submitBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        生成 PRD 文档
-      `;
-
+      submitBtn.innerHTML = SUBMIT_LABEL;
       showToast('PRD 文档生成成功！', 'success');
     });
+
+    function finishWithError(msg) {
+      if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--color-error)"></span> 生成失败';
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = SUBMIT_LABEL;
+      showToast(msg, 'error');
+    }
 
     function generateMockPRD(template, language, detail, role) {
       const templates = {
