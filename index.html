@@ -1251,9 +1251,14 @@
       let totalChars = 0;
       let gotAnyChunk = false;
 
+      // 用正则按 SSE 帧边界切：event: ...\ndata: ...\n\n
+      // 同时兼容 \r\n\r\n（HTTP 标准）和 \n\n
+      const SSE_FRAME_RE = /\r?\n\r?\n/;
+
       const handleEvent = (raw) => {
         // 解析形如  "event: chunk\ndata: {...}\n\n"
-        const lines = raw.split('\n');
+        // 用 \n 切行，但要忽略裸 \r
+        const lines = raw.replace(/\r/g, '').split('\n');
         let eventName = 'message';
         let dataLines = [];
         for (const ln of lines) {
@@ -1286,11 +1291,11 @@
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          // 按 \n\n 切分完整事件
-          let idx;
-          while ((idx = buffer.indexOf('\n\n')) !== -1) {
-            const raw = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
+          // 按 SSE 帧边界切分（兼容 \n\n 和 \r\n\r\n）
+          let m;
+          while ((m = buffer.match(SSE_FRAME_RE)) !== null) {
+            const raw = buffer.slice(0, m.index);
+            buffer = buffer.slice(m.index + m[0].length);
             if (raw.trim()) handleEvent(raw);
           }
         }
