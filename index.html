@@ -1155,17 +1155,17 @@
     });
 
     // ========== BACKEND CONFIG ==========
-    // 后端 base URL：本地开发用 http://localhost:8000；生产可在 ?api=xxx 覆盖
-    // 注意：浏览器 fetch 不允许跨域带自定义头，但 multipart + SSE 走标准协议可解 CORS
+    // 默认指向已部署的 Render 后端；用户无需带 ?api=
+    // 本地开发：访问 localhost / 127.0.0.1 → 自动切到 http://localhost:8000
+    // ?api= 仍然支持覆盖（用于本地调试 / 切到自托管实例）
+    const DEFAULT_API_BASE = 'https://prd-forge-backend.onrender.com';
     function getApiBase() {
       const q = new URLSearchParams(location.search).get('api');
       if (q) return q.replace(/\/+$/, '');
-      // 1) 同源代理：GitHub Pages 不能直连任意后端，部署时用 ?api= 注入
-      // 2) 本地开发：直接连 8000
       if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
         return 'http://localhost:8000';
       }
-      return '';   // 空字符串 → 走 mock 模式
+      return DEFAULT_API_BASE;
     }
     const API_BASE = getApiBase();
 
