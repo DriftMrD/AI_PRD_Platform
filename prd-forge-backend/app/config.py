@@ -48,7 +48,12 @@ class Settings(BaseSettings):
     def _api_key_required(cls, v: str) -> str:
         """fail-fast：禁止空值。"""
         if not v or not v.strip():
-            raise ValueError("LLM_API_KEY 缺失或为空，请检查 .env")
+            raise ValueError(
+                "LLM_API_KEY 缺失或为空。\n"
+                "  本地开发：cp .env.example .env  → 编辑 .env 填入 key\n"
+                "  Render 部署：Dashboard → prd-forge-backend → Environment → Add Secret\n"
+                "              Key=LLM_API_KEY  Value=sk-你的-key  → Save"
+            )
         return v
 
     @property
@@ -69,4 +74,10 @@ def get_settings() -> Settings:
     Raises:
         pydantic.ValidationError: 缺失 `LLM_API_KEY` 时抛出。
     """
-    return Settings()  # type: ignore[call-arg]
+    try:
+        return Settings()  # type: ignore[call-arg]
+    except Exception as exc:
+        # 把 pydantic 字段名/错误信息原样抛上去，部署平台日志里一眼能看见
+        import sys
+        print(f"\n[CONFIG ERROR] {exc.__class__.__name__}: {exc}\n", file=sys.stderr)
+        raise
