@@ -487,7 +487,7 @@
       </div>
       <nav class="header-nav">
         <a href="#" class="nav-link active">新建需求</a>
-        <a href="#" class="nav-link">历史记录</a>
+        <a href="workspace.html" class="nav-link">历史记录</a>
         <a href="#" class="nav-link">模板管理</a>
       </nav>
     </div>
@@ -579,16 +579,6 @@
         <button class="quick-btn" onclick="generatePRD()" style="padding:6px 60px;font-size:14px;">生成 PRD 文档</button>
       </div>
     </div>
-    <div class="result-card paper-card" id="resultCard">
-      <div class="result-header">
-        <div class="result-title"><span class="dot"></span> 生成的 PRD 文档</div>
-        <div class="result-actions">
-          <button class="result-btn" id="copyBtn">复制</button>
-          <button class="result-btn" id="downloadBtn">下载</button>
-        </div>
-      </div>
-      <div class="result-body"><pre class="result-content" id="resultContent"></pre></div>
-    </div>
   </main>
   <div class="toast-container" id="toastContainer"></div>
   <script>
@@ -628,79 +618,38 @@
     const optionsContent = document.getElementById('optionsContent');
     const optionsToggleIcon = document.getElementById('optionsToggleIcon');
     optionsToggle.addEventListener('click', () => { optionsContent.classList.toggle('open'); optionsToggleIcon.classList.toggle('open'); });
-    const DEFAULT_API_BASE = 'https://prd-forge-backend.onrender.com';
-    function getApiBase() { const q = new URLSearchParams(location.search).get('api'); if (q) return q.replace(/\/+$/, ''); if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return 'http://localhost:8000'; return DEFAULT_API_BASE; }
-    const API_BASE = getApiBase();
-    const submitBtn = document.getElementById('submitBtn');
-    const resultCard = document.getElementById('resultCard');
-    const resultContent = document.getElementById('resultContent');
-    const resultTitle = document.querySelector('.result-title');
-    const SUBMIT_LABEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg> 生成 PRD 文档';
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
     async function generatePRD() {
       const hasText = mainInput.value.trim().length > 0;
       const hasFiles = uploadedFiles.length > 0;
       if (!hasText && !hasFiles) { showToast('请输入需求内容或上传文件', 'error'); return; }
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<div class="spinner"></div> 正在生成 PRD...'; }
-      resultContent.textContent = ''; resultCard.classList.add('show'); resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--accent-warm)"></span> 正在生成…';
-      const cfg = { text: mainInput.value, template: document.getElementById('templateSelect').value, language: document.getElementById('languageSelect').value, detail: document.getElementById('detailSelect').value, role: document.getElementById('roleSelect').value };
-      if (!API_BASE) { await new Promise(r => setTimeout(r, 1500)); resultContent.textContent = generateMockPRD(cfg.template, cfg.language, cfg.detail, cfg.role); if (resultTitle) resultTitle.innerHTML = '<span class="dot"></span> 生成的 PRD 文档（演示数据）'; if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = SUBMIT_LABEL; } showToast('当前为演示模式：用 ?api= 传入后端地址启用真实生成', 'info'); return; }
-      const fd = new FormData(); fd.append('text', cfg.text); fd.append('template', cfg.template); fd.append('language', cfg.language); fd.append('detail', cfg.detail); fd.append('role', cfg.role); uploadedFiles.forEach(f => fd.append('files', f, f.name));
-      let response; try { response = await fetch(API_BASE + '/api/generate', { method: 'POST', body: fd }); } catch (e) { finishWithError('无法连接后端 ' + API_BASE + '：' + e.message); return; }
-      if (!response.ok || !response.body) { finishWithError('后端返回 ' + response.status + ' ' + response.statusText); return; }
-      if (!response.headers.get('content-type')?.includes('text/event-stream')) { finishWithError('后端未返回 SSE 流，请检查 CORS / 路由'); return; }
-      const reader = response.body.getReader(); const decoder = new TextDecoder('utf-8'); let buffer = ''; let totalChars = 0; let gotAnyChunk = false; const SSE_FRAME_RE = /\r?\n\r?\n/;
-      const handleEvent = (raw) => {
-        const lines = raw.replace(/\r/g, '').split('\n');
-        let eventName = 'message';
-        let dataLines = [];
-        const flush = () => {
-          if (!dataLines.length) return;
-          const dataStr = dataLines.join('\n');
-          dataLines = [];
-          let payload = {};
-          try { payload = JSON.parse(dataStr); } catch {}
-          if (eventName === 'chunk' && payload.delta) {
-            resultContent.textContent += payload.delta;
-            totalChars += payload.delta.length;
-            gotAnyChunk = true;
-          } else if (eventName === 'progress' && payload.message) {
-            if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--accent-warm)"></span> ' + escapeHtml(payload.message);
-          } else if (eventName === 'error') {
-            finishWithError(payload.message || payload.code || '后端错误');
-            throw new Error('__SSE_ERROR__');
-          }
-        };
-        for (const ln of lines) {
-          if (ln.startsWith('event:')) eventName = ln.slice(6).trim();
-          else if (ln.startsWith('data:')) dataLines.push(ln.slice(5).trim());
-          else if (ln === '') flush();
+      const cfg = {
+        text: mainInput.value,
+        template: document.getElementById('templateSelect').value,
+        language: document.getElementById('languageSelect').value,
+        detail: document.getElementById('detailSelect').value,
+        role: document.getElementById('roleSelect').value,
+        files: []
+      };
+      try {
+        for (const f of uploadedFiles) {
+          cfg.files.push({ name: f.name, type: f.type, size: f.size, data: await fileToBase64(f) });
         }
-        flush();
-      };
-      try { while (true) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); let m; while ((m = buffer.match(SSE_FRAME_RE)) !== null) { const raw = buffer.slice(0, m.index); buffer = buffer.slice(m.index + m[0].length); if (raw.trim()) handleEvent(raw); } } if (buffer.trim()) handleEvent(buffer); } catch (e) { if (e.message !== '__SSE_ERROR__') { finishWithError('流读取中断：' + e.message); return; } return; }
-      if (!gotAnyChunk) { finishWithError('后端没有返回任何内容'); return; }
-      if (resultTitle) resultTitle.innerHTML = '<span class="dot"></span> 生成的 PRD 文档（' + totalChars + ' 字）';
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = SUBMIT_LABEL; } showToast('PRD 文档生成成功！', 'success');
+      } catch (e) {
+        showToast('文件读取失败：' + e.message, 'error');
+        return;
+      }
+      sessionStorage.setItem('prd_forge_pending', JSON.stringify(cfg));
+      const api = new URLSearchParams(location.search).get('api');
+      location.href = 'workspace.html' + (api ? '?api=' + encodeURIComponent(api) : '');
     }
-    if (submitBtn) { submitBtn.addEventListener('click', generatePRD); }
-    function finishWithError(msg) { if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:#a03020"></span> 生成失败'; if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = SUBMIT_LABEL; } showToast(msg, 'error'); }
-    function generateMockPRD(template, language, detail, role) {
-      const templates = {
-        standard: '## 1. 文档信息\n\n| 项目 | 内容 |\n|------|------|\n| 文档版本 | v1.0 |\n| 撰写日期 | ' + new Date().toLocaleDateString('zh-CN') + ' |\n| 撰写人 | PRD Forge AI |\n| 评审状态 | 待评审 |\n\n## 2. 产品概述\n\n### 2.1 产品背景\n基于用户输入的需求描述，该产品旨在解决目标用户在特定场景下的核心痛点。\n\n### 2.2 产品目标\n1. 解决用户核心痛点，提升关键指标\n2. 建立可持续的产品价值闭环\n3. 在目标市场建立竞争优势\n\n### 2.3 目标用户\n- 主要用户群体：产品经理、设计师、开发工程师\n- 使用场景：需求分析、产品规划、团队协作\n\n## 3. 功能需求\n\n### 3.1 核心功能模块\n\n#### 模块一：多模态输入\n- 需求描述：支持文本、文件两种输入方式\n- 验收标准：文本输入支持实时字数统计；文件上传支持拖拽和点击，限制 20MB\n\n#### 模块二：智能生成\n- 需求描述：基于 AI 模型自动生成标准化 PRD 文档\n- 验收标准：生成结果符合选定模板规范；支持多种输出语言；生成时间不超过 30 秒\n\n## 4. 非功能需求\n\n- 性能：页面加载时间 < 2 秒\n- 安全：数据传输 HTTPS 加密\n- 兼容性：支持主流浏览器最新两个版本',
-        agile: '## 产品待办列表 (Product Backlog)\n\n### 史诗: 智能 PRD 生成平台\n\n### 用户故事 1\n作为产品经理，我希望通过文本输入需求，以便快速生成 PRD 文档\n\n**验收标准:**\n- [ ] 提供多行文本输入框，最小高度 200px\n- [ ] 支持字数统计（实时显示）\n- [ ] 生成结果符合行业标准\n\n**故事点:** 8 | **优先级:** P0\n\n### 用户故事 2\n作为产品经理，我希望上传现有文档，以便 AI 基于文档内容生成 PRD\n\n**验收标准:**\n- [ ] 支持拖拽上传和点击上传\n- [ ] 支持 PDF、Word、Markdown、TXT、图片格式\n- [ ] 单文件最大 20MB\n\n**故事点:** 5 | **优先级:** P0',
-        detailed: '## 1. 文档控制\n\n| 版本 | 日期 | 修改内容 |\n|------|------|----------|\n| v0.1 | ' + new Date().toLocaleDateString('zh-CN') + ' | 初始版本 |\n\n## 2. 产品战略\n\n### 2.1 市场分析\n当前市场缺乏针对中文产品经理的智能化 PRD 生成工具。\n\n## 3. 详细功能规格\n\n### 3.1 功能编号: FUNC-001\n**功能名称:** 多模态需求输入 | **优先级:** P0\n\n#### 3.1.1 功能描述\n提供统一输入入口，支持文本、文件两种方式录入需求信息。\n\n#### 3.1.2 业务规则\n1. 文件格式限制: PDF, DOC, DOCX, MD, TXT, PNG, JPG\n2. 文件大小限制: 单个文件 <= 20MB',
-        onepage: '# 产品需求文档 (PRD)\n\n## 一句话描述\n帮助产品经理通过文本或文件输入，自动生成标准化 PRD 文档的 AI 平台。\n\n---\n\n## 目标用户\n产品经理、产品助理、创业者\n\n## 解决什么问题\n写 PRD 耗时耗力、格式不统一、质量参差不齐\n\n## 核心价值主张\n**5 分钟输入 → AI 生成 → 专业级 PRD**\n\n---\n\n## 核心功能\n\n| 功能 | 说明 | 优先级 |\n|------|------|--------|\n| 文本输入 | 支持多行描述，字数统计 | P0 |\n| 文件上传 | 支持 PDF/Word/MD 等格式 | P0 |\n| 模板选择 | 多种 PRD 模板可选 | P1 |\n| 流式输出 | SSE 实时生成反馈 | P0 |\n\n## 技术约束\n\n- 前端：纯 HTML/CSS/JS\n- 后端：FastAPI + AI API\n- 部署：Render / VPS'
-      };
-      const key = templates[template] ? template : 'standard';
-      let r = templates[key];
-      if (detail === 'detailed' || detail === 'exhaustive') r += '\n\n## 补充说明\n\n本文档由 PRD Forge AI 自动生成，详细程度：' + detail + '。请根据实际需求进行人工审核和调整。';
-      return r;
-    }
-    const copyBtn = document.getElementById('copyBtn');
-    copyBtn.addEventListener('click', () => { const text = resultContent.textContent; if (!text) return; navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板', 'success')).catch(() => showToast('复制失败', 'error')); });
-    const downloadBtn = document.getElementById('downloadBtn');
-    downloadBtn.addEventListener('click', () => { const text = resultContent.textContent; if (!text) return; const blob = new Blob([text], { type: 'text/markdown' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'PRD_' + new Date().toISOString().slice(0, 10) + '.md'; a.click(); URL.revokeObjectURL(url); showToast('已开始下载', 'success'); });
     function showToast(message, type) {
       type = type || 'info';
       const container = document.getElementById('toastContainer');
