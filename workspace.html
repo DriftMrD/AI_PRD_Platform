@@ -45,9 +45,9 @@
     }
     .panel-left {
       display: flex; flex-direction: column; border-right: 2px solid var(--paper-border);
-      background: var(--paper-card); min-height: 0;
+      background: var(--paper-card); min-height: 0; position: relative;
     }
-    .history-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .history-section { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     .session-chips {
       display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; flex-shrink: 0;
       border-bottom: 1px dotted var(--paper-border-lt);
@@ -81,9 +81,14 @@
     .msg-bubble.assistant { background: rgba(250,244,228,0.9); color: var(--ink-mid); align-self: flex-start; }
     .msg-bubble.system { background: transparent; border-style: dashed; color: var(--ink-faint); font-size: 13px; text-align: center; align-self: center; }
     .msg-time { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+    .msg-bubble.typing { color: var(--ink-faint); font-style: italic; }
+    .msg-bubble.typing::after { content: ''; display: inline-block; width: 4px; height: 4px; margin-left: 4px; border-radius: 50%; background: var(--accent-warm); animation: blink 1s infinite; vertical-align: middle; }
+    @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
     .chat-section {
+      position: sticky; bottom: 0; z-index: 5;
       border-top: 2px solid var(--paper-border); padding: 12px; flex-shrink: 0;
       background: var(--paper-warm);
+      box-shadow: 0 -4px 12px rgba(44,26,14,0.06);
     }
     .chat-input {
       width: 100%; min-height: 72px; max-height: 140px; padding: 10px 12px;
@@ -101,6 +106,7 @@
     }
     .sketch-btn:hover { border-color: var(--paper-border); background: rgba(44,26,14,0.04); }
     .sketch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sketch-btn.loading { color: var(--accent-orange); border-color: var(--accent-orange); }
     .panel-right {
       display: flex; flex-direction: column; min-height: 0; background: var(--paper-base);
     }
@@ -327,14 +333,21 @@
       return new Blob([arr], { type: type || 'application/octet-stream' });
     }
 
-    async function runGenerate(session, userText) {
+    async function runGenerate(session, userText, statusMsg) {
       if (generating) return;
       generating = true;
       sendBtn.disabled = true;
+      sendBtn.classList.add('loading');
+      sendBtn.textContent = '生成中…';
       session.status = 'generating';
-      if (!userText) session.prd = '';
+      session.prd = '';
+      prdContent.textContent = '';
+      prdContent.style.display = 'none';
+      prdPlaceholder.textContent = statusMsg || '正在连接后端，等待模型返回首字…';
+      prdPlaceholder.style.display = 'block';
       saveSessions();
       renderPrd();
+      addTypingBubble(statusMsg || '正在生成 PRD，请稍候…');
 
       const cfg = session.config;
       const fd = new FormData();
@@ -375,13 +388,16 @@
           let payload = {};
           try { payload = JSON.parse(dataStr); } catch {}
           if (eventName === 'chunk' && payload.delta) {
+            removeTypingBubble();
             session.prd += payload.delta;
             prdContent.textContent = session.prd;
             prdContent.style.display = 'block';
             prdPlaceholder.style.display = 'none';
             gotAnyChunk = true;
             prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…（' + session.prd.length + ' 字）';
+            prdContent.closest('.prd-body').scrollTop = prdContent.closest('.prd-body').scrollHeight;
           } else if (eventName === 'progress' && payload.message) {
+            updateTypingBubble(payload.message);
             prdTitle.innerHTML = '<span class="dot warm"></span> ' + escapeHtml(payload.message);
           } else if (eventName === 'error') {
             throw new Error(payload.message || payload.code || '后端错误');
@@ -420,23 +436,55 @@
 
       session.status = 'done';
       session.updatedAt = Date.now();
+      removeTypingBubble();
       session.messages.push({ role: 'assistant', content: 'PRD 已生成（' + session.prd.length + ' 字）', time: Date.now() });
       saveSessions();
       renderMessages();
       renderPrd();
       showToast('PRD 生成成功！', 'success');
+      resetSendBtn();
+    }
+
+    function resetSendBtn() {
       generating = false;
       sendBtn.disabled = false;
+      sendBtn.classList.remove('loading');
+      sendBtn.textContent = '发送';
     }
 
     function finishError(session, msg) {
       session.status = 'error';
       session.updatedAt = Date.now();
+      removeTypingBubble();
+      if (session._prdBackup) {
+        session.prd = session._prdBackup;
+        delete session._prdBackup;
+      }
       saveSessions();
       renderPrd();
       showToast(msg, 'error');
-      generating = false;
-      sendBtn.disabled = false;
+      resetSendBtn();
+    }
+
+    let typingEl = null;
+    function addTypingBubble(text) {
+      removeTypingBubble();
+      typingEl = document.createElement('div');
+      typingEl.className = 'msg-bubble assistant typing';
+      typingEl.id = 'typingBubble';
+      typingEl.textContent = text;
+      messageEmpty.style.display = 'none';
+      messageList.appendChild(typingEl);
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+    function updateTypingBubble(text) {
+      if (typingEl) typingEl.textContent = text;
+      else addTypingBubble(text);
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+    function removeTypingBubble() {
+      if (typingEl) { typingEl.remove(); typingEl = null; }
+      else document.getElementById('typingBubble')?.remove();
     }
 
     async function sendMessage() {
@@ -454,7 +502,10 @@
 
       const context = s.messages.filter(m => m.role === 'user').map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
       const prompt = context + (s.prd ? '\n\n【当前 PRD 草稿，请在此基础上修改】\n' + s.prd.slice(0, 8000) : '');
-      await runGenerate(s, prompt);
+      const prevPrd = s.prd;
+      if (prevPrd) s._prdBackup = prevPrd;
+      await runGenerate(s, prompt, '已收到补充，正在重新生成 PRD…');
+      delete s._prdBackup;
     }
 
     sendBtn.addEventListener('click', sendMessage);
