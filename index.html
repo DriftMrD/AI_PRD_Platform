@@ -579,7 +579,7 @@
         <button class="quick-btn" onclick="generatePRD()" style="padding:6px 60px;font-size:14px;">生成 PRD 文档</button>
       </div>
     </div>
-    <div class="result-card paper-card" id="resultCard" style="display:none">
+    <div class="result-card paper-card" id="resultCard">
       <div class="result-header">
         <div class="result-title"><span class="dot"></span> 生成的 PRD 文档</div>
         <div class="result-actions">
@@ -641,7 +641,7 @@
       const hasFiles = uploadedFiles.length > 0;
       if (!hasText && !hasFiles) { showToast('请输入需求内容或上传文件', 'error'); return; }
       if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<div class="spinner"></div> 正在生成 PRD...'; }
-      resultContent.textContent = ''; resultCard.classList.add('show');
+      resultContent.textContent = ''; resultCard.classList.add('show'); resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--accent-warm)"></span> 正在生成…';
       const cfg = { text: mainInput.value, template: document.getElementById('templateSelect').value, language: document.getElementById('languageSelect').value, detail: document.getElementById('detailSelect').value, role: document.getElementById('roleSelect').value };
       if (!API_BASE) { await new Promise(r => setTimeout(r, 1500)); resultContent.textContent = generateMockPRD(cfg.template, cfg.language, cfg.detail, cfg.role); if (resultTitle) resultTitle.innerHTML = '<span class="dot"></span> 生成的 PRD 文档（演示数据）'; if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = SUBMIT_LABEL; } showToast('当前为演示模式：用 ?api= 传入后端地址启用真实生成', 'info'); return; }
