@@ -650,7 +650,34 @@
       if (!response.ok || !response.body) { finishWithError('后端返回 ' + response.status + ' ' + response.statusText); return; }
       if (!response.headers.get('content-type')?.includes('text/event-stream')) { finishWithError('后端未返回 SSE 流，请检查 CORS / 路由'); return; }
       const reader = response.body.getReader(); const decoder = new TextDecoder('utf-8'); let buffer = ''; let totalChars = 0; let gotAnyChunk = false; const SSE_FRAME_RE = /\r?\n\r?\n/;
-      const handleEvent = (raw) => { const lines = raw.replace(/\r/g, '').split('\n'); let eventName = 'message'; let dataLines = []; for (const ln of lines) { if (ln.startsWith('event:')) eventName = ln.slice(6).trim(); else if (ln.startsWith('data:')) dataLines.push(ln.slice(5).trim()); else if (ln === '') { if (!dataLines.length) continue; const dataStr = dataLines.join('\n'); dataLines = []; let payload = {}; try { payload = JSON.parse(dataStr); } catch {} if (eventName === 'chunk' && payload.delta) { resultContent.textContent += payload.delta; totalChars += payload.delta.length; gotAnyChunk = true; } else if (eventName === 'progress' && payload.message) { if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--accent-warm)"></span> ' + escapeHtml(payload.message); } else if (eventName === 'error') { finishWithError(payload.message || payload.code || '后端错误'); throw new Error('__SSE_ERROR__'); } } } };
+      const handleEvent = (raw) => {
+        const lines = raw.replace(/\r/g, '').split('\n');
+        let eventName = 'message';
+        let dataLines = [];
+        const flush = () => {
+          if (!dataLines.length) return;
+          const dataStr = dataLines.join('\n');
+          dataLines = [];
+          let payload = {};
+          try { payload = JSON.parse(dataStr); } catch {}
+          if (eventName === 'chunk' && payload.delta) {
+            resultContent.textContent += payload.delta;
+            totalChars += payload.delta.length;
+            gotAnyChunk = true;
+          } else if (eventName === 'progress' && payload.message) {
+            if (resultTitle) resultTitle.innerHTML = '<span class="dot" style="background:var(--accent-warm)"></span> ' + escapeHtml(payload.message);
+          } else if (eventName === 'error') {
+            finishWithError(payload.message || payload.code || '后端错误');
+            throw new Error('__SSE_ERROR__');
+          }
+        };
+        for (const ln of lines) {
+          if (ln.startsWith('event:')) eventName = ln.slice(6).trim();
+          else if (ln.startsWith('data:')) dataLines.push(ln.slice(5).trim());
+          else if (ln === '') flush();
+        }
+        flush();
+      };
       try { while (true) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); let m; while ((m = buffer.match(SSE_FRAME_RE)) !== null) { const raw = buffer.slice(0, m.index); buffer = buffer.slice(m.index + m[0].length); if (raw.trim()) handleEvent(raw); } } if (buffer.trim()) handleEvent(buffer); } catch (e) { if (e.message !== '__SSE_ERROR__') { finishWithError('流读取中断：' + e.message); return; } return; }
       if (!gotAnyChunk) { finishWithError('后端没有返回任何内容'); return; }
       if (resultTitle) resultTitle.innerHTML = '<span class="dot"></span> 生成的 PRD 文档（' + totalChars + ' 字）';

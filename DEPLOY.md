@@ -46,7 +46,7 @@ DeepSeek / OpenAI / 其他 LLM
 1. Dashboard → `prd-forge-backend` → 左侧 **Environment**
 2. **Add Secret**：
    - **Key**: `LLM_API_KEY`
-   - **Value**: `sk-6b19d02673274213a9f79f6bec8033a0`（你的 DeepSeek key）
+   - **Value**: `sk-你的新key`（仅填在 Render Dashboard，不要写进代码或文档）
 3. 点 **Save Changes** → Render 自动 redeploy
 4. 等 1-2 分钟，看日志出现 `startup: settings loaded (provider=openai, model=deepseek-chat)` 就算成功
 
