@@ -11,6 +11,7 @@ create table if not exists public.prd_sessions (
   files jsonb not null default '[]'::jsonb,
   messages jsonb not null default '[]'::jsonb,
   prd text not null default '',
+  prd_versions jsonb not null default '[]'::jsonb,
   status text not null default 'pending'
     check (status in ('pending', 'generating', 'done', 'error')),
   created_at timestamptz not null default now(),

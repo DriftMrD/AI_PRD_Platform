@@ -98,7 +98,7 @@
 
   PrdForge.SessionStore = {
     rowToSession(row) {
-      return {
+      const session = {
         id: row.id,
         title: row.title,
         createdAt: new Date(row.created_at).getTime(),
@@ -107,8 +107,13 @@
         files: row.files || [],
         messages: row.messages || [],
         prd: row.prd || '',
+        prdVersions: row.prd_versions || [],
         status: row.status || 'pending'
       };
+      if (!session.prdVersions.length && session.prd) {
+        session.prdVersions = [{ v: 1, content: session.prd, createdAt: session.updatedAt, label: 'v1' }];
+      }
+      return session;
     },
 
     sessionToRow(session, userId) {
@@ -120,6 +125,7 @@
         files: session.files || [],
         messages: session.messages || [],
         prd: session.prd || '',
+        prd_versions: session.prdVersions || [],
         status: session.status || 'pending'
       };
     },
@@ -167,6 +173,7 @@
         files: pending.files || [],
         messages: [{ role: 'user', content: pending.text, time: Date.now() }],
         prd: '',
+        prd_versions: [],
         status: 'pending'
       };
 
@@ -198,6 +205,7 @@
         files: s.files || [],
         messages: s.messages || [],
         prd: s.prd || '',
+        prd_versions: s.prdVersions || [],
         status: s.status === 'generating' ? 'error' : (s.status || 'done'),
         created_at: s.createdAt ? new Date(s.createdAt).toISOString() : undefined,
         updated_at: s.updatedAt ? new Date(s.updatedAt).toISOString() : undefined
