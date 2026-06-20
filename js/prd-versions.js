@@ -1,11 +1,29 @@
 (function () {
   'use strict';
 
-  const SENTENCE_SPLIT = /(?<=[。！？.!?])\s*|\n{2,}/;
+  // 按句末、空行、Markdown 标题前拆段，避免合并时丢失换行
+  const UNIT_SPLIT = /(?<=[。！？.!?])\s*|\n+(?=#{1,6}\s)|\n{2,}/;
 
   function splitUnits(text) {
     if (!text) return [];
-    return text.split(SENTENCE_SPLIT).map(s => s.trim()).filter(Boolean);
+    return text.split(UNIT_SPLIT).map(s => s.trim()).filter(Boolean);
+  }
+
+  function charsToText(encoded, lineArray) {
+    let out = '';
+    for (let i = 0; i < encoded.length; i++) {
+      const idx = encoded.charCodeAt(i);
+      if (idx >= lineArray.length - 1) continue;
+      const line = lineArray[idx];
+      if (!line) continue;
+      if (out) out += '\n';
+      out += line;
+    }
+    return out;
+  }
+
+  function expandDiffs(diffs, lineArray) {
+    return diffs.map(([op, chars]) => [op, charsToText(chars, lineArray)]);
   }
 
   function sentencesToChars(text1, text2) {
@@ -39,9 +57,8 @@
     const dmp = new diff_match_patch();
     const encoded = sentencesToChars(oldText, newText);
     const diffs = dmp.diff_main(encoded.chars1, encoded.chars2, false);
-    dmp.diff_charsToLines_(diffs, encoded.lineArray);
     dmp.diff_cleanupSemantic(diffs);
-    return groupHunks(diffs);
+    return groupHunks(expandDiffs(diffs, encoded.lineArray));
   }
 
   function groupHunks(diffs) {
@@ -58,8 +75,8 @@
       const ins = [];
       while (i < diffs.length && diffs[i][0] === -1) { dels.push(diffs[i][1]); i++; }
       while (i < diffs.length && diffs[i][0] === 1) { ins.push(diffs[i][1]); i++; }
-      const oldText = dels.join('\n\n');
-      const newText = ins.join('\n\n');
+      const oldText = dels.join('\n');
+      const newText = ins.join('\n');
       if (oldText && newText) {
         hunks.push({ type: 'change', oldText, newText, id: 'h' + hunks.length });
       } else if (newText) {
@@ -95,17 +112,33 @@
       if (dec.choice === 'remove') return '';
       if (dec.choice === 'custom') return dec.text || '';
       return '';
-    }).join('\n\n');
+    }).filter(Boolean).join('\n');
   }
 
-  function pushVersion(session, content, label) {
+  function pushVersion(session, content, label, opts) {
     if (!content || !content.trim()) return null;
     if (!session.prdVersions) session.prdVersions = [];
     const last = session.prdVersions[session.prdVersions.length - 1];
-    if (last && last.content === content) return last;
+    if (last && last.content === content && (!opts || opts.allowDuplicate !== true)) return last;
     const v = session.prdVersions.length + 1;
-    const entry = { v, content, createdAt: Date.now(), label: label || ('v' + v) };
+    const entry = {
+      v, content, createdAt: Date.now(),
+      label: label || ('v' + v),
+      confirmed: opts && opts.confirmed === false ? false : true
+    };
     session.prdVersions.push(entry);
+    return entry;
+  }
+
+  function confirmVersion(session, v, content, label) {
+    if (!content || !content.trim()) return null;
+    if (!session.prdVersions) session.prdVersions = [];
+    const entry = session.prdVersions.find(x => x.v === v);
+    if (!entry) return pushVersion(session, content, label);
+    entry.content = content;
+    entry.confirmed = true;
+    entry.confirmedAt = Date.now();
+    if (label) entry.label = label;
     return entry;
   }
 
@@ -120,6 +153,7 @@
     defaultDecisions,
     buildMergedText,
     pushVersion,
+    confirmVersion,
     getVersion
   };
 })();

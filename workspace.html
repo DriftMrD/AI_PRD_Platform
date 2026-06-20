@@ -175,14 +175,19 @@
       display: none; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
       background: var(--paper-card);
     }
-    .diff-controls.visible { display: flex; }
-    .diff-select {
-      font-family: var(--font-note); font-size: 13px; padding: 4px 8px;
-      border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper);
-      background: var(--paper-base); color: var(--ink-mid);
+    .review-bar {
+      padding: 12px 20px; border-bottom: 1px dotted var(--paper-border-lt);
+      display: none; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
+      background: rgba(212,116,42,0.08);
     }
-    .diff-vs { font-family: var(--font-note); font-size: 13px; color: var(--ink-faint); }
-    .diff-bulk { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+    .review-bar.visible { display: flex; }
+    .review-title {
+      font-family: var(--font-note); font-size: 14px; font-weight: 600; color: var(--ink-mid); flex: 1;
+    }
+    .review-progress {
+      font-family: var(--font-note); font-size: 13px; color: var(--ink-light);
+    }
+    .review-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .prd-body {
       flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
       padding: 20px 24px 32px;
@@ -233,7 +238,14 @@
     }
     .diff-hunk-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .diff-hunk-actions .sketch-btn { font-size: 12px; padding: 3px 10px; }
-    .diff-hunk-actions .sketch-btn.chosen { border-color: var(--accent-orange); color: var(--accent-orange); }
+    .diff-hunk.confirmed { border-color: rgba(90,122,85,0.45); background: rgba(90,122,85,0.04); }
+    .hunk-status {
+      font-family: var(--font-note); font-size: 13px; color: var(--accent-green);
+      margin-top: 8px; display: none;
+    }
+    .diff-hunk.confirmed .hunk-status { display: block; }
+    .diff-hunk.confirmed .diff-hunk-actions { display: none; }
+    .diff-hunk.confirmed .diff-custom-input { display: none !important; }
     .diff-custom-input {
       width: 100%; margin-top: 8px; min-height: 60px; padding: 8px 10px;
       border: 1px dashed var(--paper-border); border-radius: var(--radius-paper);
@@ -244,6 +256,22 @@
       position: sticky; bottom: 0; padding: 12px 0 4px;
       background: linear-gradient(transparent, var(--paper-base) 30%);
       display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .edit-action-bar {
+      display: none; padding: 10px 20px; gap: 8px; align-items: center;
+      border-bottom: 1px dotted var(--paper-border-lt);
+      background: rgba(212,116,42,0.06); flex-shrink: 0;
+    }
+    .edit-action-bar.visible { display: flex; }
+    .edit-hint {
+      font-family: var(--font-note); font-size: 13px; color: var(--ink-light); flex: 1;
+    }
+    .sketch-btn.primary {
+      border-color: var(--accent-orange); color: var(--paper-card);
+      background: var(--accent-orange);
+    }
+    .sketch-btn.primary:hover {
+      background: #c06624; border-color: #c06624; color: var(--paper-card);
     }
     .session-item {
       padding: 14px 16px; border: 1.5px solid var(--paper-border-lt);
@@ -346,7 +374,7 @@
       <div class="prd-header">
         <div class="prd-title" id="prdTitle"><span class="dot warm"></span> 等待生成…</div>
         <div class="prd-actions">
-          <button class="sketch-btn" id="saveEditBtn" style="display:none">保存编辑</button>
+          <button type="button" class="sketch-btn" id="saveEditBtn" style="display:none">保存编辑</button>
           <button class="sketch-btn" id="copyBtn">复制</button>
           <button class="sketch-btn" id="downloadBtn">下载</button>
         </div>
@@ -358,18 +386,20 @@
         <div class="view-mode-tabs">
           <button type="button" class="mode-tab active" data-mode="view">查看</button>
           <button type="button" class="mode-tab" data-mode="edit">编辑</button>
-          <button type="button" class="mode-tab" data-mode="diff">对比合并</button>
         </div>
       </div>
-      <div class="diff-controls" id="diffControls">
-        <select class="diff-select" id="diffBaseSelect"></select>
-        <span class="diff-vs">→</span>
-        <select class="diff-select" id="diffNewSelect"></select>
-        <div class="diff-bulk">
-          <button type="button" class="sketch-btn" id="acceptAllNewBtn">全部采纳新版</button>
-          <button type="button" class="sketch-btn" id="keepAllOldBtn">全部保留旧版</button>
-          <button type="button" class="sketch-btn" id="applyMergeBtn">应用合并结果</button>
+      <div class="review-bar" id="reviewBar">
+        <div class="review-title" id="reviewTitle">生成完成，请确认变更</div>
+        <span class="review-progress" id="reviewProgress"></span>
+        <div class="review-actions">
+          <button type="button" class="sketch-btn" id="acceptAllReviewBtn">全部采纳新版</button>
+          <button type="button" class="sketch-btn primary" id="finishReviewBtn">完成确认</button>
         </div>
+      </div>
+      <div class="edit-action-bar" id="editActionBar">
+        <span class="edit-hint">编辑模式 · ⌘S / Ctrl+S 保存</span>
+        <button type="button" class="sketch-btn" id="cancelEditBtn">取消</button>
+        <button type="button" class="sketch-btn primary" id="saveEditBarBtn">保存编辑</button>
       </div>
       <div class="prd-body">
         <pre class="prd-content" id="prdContent"></pre>
@@ -411,6 +441,15 @@
     let selectedVersion = null;
     let diffDecisions = {};
     let currentHunks = [];
+    let pendingReview = false;
+    let reviewBaseV = null;
+    let reviewNewV = null;
+    let editDirty = false;
+    let editBaseline = '';
+
+    const CHOICE_LABELS = {
+      new: '采纳新版', old: '保留旧版', remove: '忽略', custom: '自定义', equal: '未改动'
+    };
 
     const listView = document.getElementById('listView');
     const detailView = document.getElementById('detailView');
@@ -428,11 +467,14 @@
     const sessionTitle = document.getElementById('sessionTitle');
     const prdToolbar = document.getElementById('prdToolbar');
     const versionStrip = document.getElementById('versionStrip');
-    const diffControls = document.getElementById('diffControls');
     const diffView = document.getElementById('diffView');
-    const diffBaseSelect = document.getElementById('diffBaseSelect');
-    const diffNewSelect = document.getElementById('diffNewSelect');
+    const reviewBar = document.getElementById('reviewBar');
+    const reviewTitle = document.getElementById('reviewTitle');
+    const reviewProgress = document.getElementById('reviewProgress');
     const saveEditBtn = document.getElementById('saveEditBtn');
+    const saveEditBarBtn = document.getElementById('saveEditBarBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const editActionBar = document.getElementById('editActionBar');
 
     function statusLabel(status) {
       return { pending: '待生成', generating: '生成中', done: '已完成', error: '失败' }[status] || status;
@@ -472,6 +514,7 @@
       viewMode = 'detail';
       currentId = id;
       prdViewMode = 'view';
+      pendingReview = false;
       selectedVersion = null;
       listView.classList.add('hidden');
       detailView.classList.remove('hidden');
@@ -571,17 +614,28 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'version-chip' + (selectedVersion === ver.v ? ' active' : '');
-        btn.textContent = 'v' + ver.v + (ver.v === versions.length ? ' 最新' : '');
+        const isLatest = ver.v === versions.length;
+        const confirmed = ver.confirmed !== false;
+        btn.textContent = 'v' + ver.v
+          + (isLatest && !confirmed ? ' 待确认' : '')
+          + (isLatest && confirmed ? ' 最新' : '')
+          + (!isLatest && confirmed ? ' ✓' : '');
         btn.title = formatTime(ver.createdAt) + (ver.label ? ' · ' + ver.label : '');
         btn.addEventListener('click', () => {
+          if (pendingReview && !confirm('还在确认变更中，切换版本将退出确认，继续吗？')) return;
+          if (prdViewMode === 'edit' && editDirty && !confirm('有未保存的编辑，切换版本将丢失修改，继续吗？')) return;
+          const wasEdit = prdViewMode === 'edit';
+          pendingReview = false;
+          prdViewMode = 'view';
           selectedVersion = ver.v;
-          if (prdViewMode === 'diff') {
-            diffNewSelect.value = String(ver.v);
-            renderDiffView();
+          if (wasEdit) {
+            editDirty = false;
+            loadEditorContent(s);
           } else {
             renderPrdBody(s, ver.content);
           }
           renderVersionStrip(s);
+          renderPrd();
         });
         versionStrip.appendChild(btn);
       });
@@ -589,63 +643,120 @@
     }
 
     function setPrdViewMode(mode) {
+      if (pendingReview && mode !== 'review') {
+        if (!confirm('还在确认变更中，确定离开吗？')) return;
+        pendingReview = false;
+      }
+      if (prdViewMode === 'edit' && mode !== 'edit' && editDirty) {
+        if (!confirm('有未保存的编辑，确定离开吗？')) return;
+      }
+      if (mode !== 'edit') editDirty = false;
       prdViewMode = mode;
       document.querySelectorAll('.mode-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.mode === mode);
       });
-      diffControls.classList.toggle('visible', mode === 'diff');
+      reviewBar.classList.toggle('visible', pendingReview && mode === 'review');
+      editActionBar.classList.toggle('visible', mode === 'edit');
       saveEditBtn.style.display = mode === 'edit' ? 'inline-block' : 'none';
       renderPrd();
+    }
+
+    function loadEditorContent(s) {
+      const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
+      const text = ver ? ver.content : s.prd;
+      prdEditor.value = text;
+      editBaseline = text;
+      editDirty = false;
     }
 
     function renderPrdBody(s, text) {
       prdContent.textContent = text || '';
       prdContent.style.display = prdViewMode === 'view' ? 'block' : 'none';
       prdEditor.style.display = prdViewMode === 'edit' ? 'block' : 'none';
-      diffView.classList.toggle('visible', prdViewMode === 'diff');
+      diffView.classList.toggle('visible', prdViewMode === 'review');
       if (prdViewMode === 'edit') prdEditor.value = text || s.prd || '';
       prdPlaceholder.style.display = (text || s.prd) ? 'none' : 'block';
     }
 
-    function populateDiffSelects(s) {
+    function startReview(s) {
       const versions = s.prdVersions || [];
-      const opts = versions.map(v => `<option value="${v.v}">v${v.v}</option>`).join('');
-      diffBaseSelect.innerHTML = opts;
-      diffNewSelect.innerHTML = opts;
-      if (versions.length >= 2) {
-        diffBaseSelect.value = String(versions[versions.length - 2].v);
-        diffNewSelect.value = String(versions[versions.length - 1].v);
-      } else if (versions.length === 1) {
-        diffBaseSelect.value = diffNewSelect.value = String(versions[0].v);
-      }
+      if (versions.length < 2) return;
+      reviewBaseV = versions[versions.length - 2].v;
+      reviewNewV = versions[versions.length - 1].v;
+      pendingReview = true;
+      prdViewMode = 'review';
+      selectedVersion = reviewNewV;
+      reviewTitle.textContent = 'v' + reviewBaseV + ' → v' + reviewNewV + ' 变更确认';
+      renderPrd();
     }
 
-    function renderDiffView() {
+    function reviewableHunks() {
+      return currentHunks.filter(h => h.type !== 'equal');
+    }
+
+    function updateReviewProgress() {
+      const total = reviewableHunks().length;
+      const done = reviewableHunks().filter(h => {
+        const el = diffView.querySelector('[data-id="' + h.id + '"]');
+        return el && el.classList.contains('confirmed');
+      }).length;
+      reviewProgress.textContent = total ? done + ' / ' + total + ' 已确认' : '';
+    }
+
+    function setHunkDecision(el, hunk, choice, customText) {
+      if (choice === 'new') diffDecisions[hunk.id] = { choice: 'new', text: hunk.newText || '' };
+      else if (choice === 'old') diffDecisions[hunk.id] = { choice: 'old', text: hunk.oldText || '' };
+      else if (choice === 'remove') diffDecisions[hunk.id] = { choice: 'remove', text: '' };
+      else if (choice === 'custom') diffDecisions[hunk.id] = { choice: 'custom', text: customText || '' };
+      el.classList.add('confirmed');
+      const status = el.querySelector('.hunk-status');
+      if (status) status.textContent = '✓ 已确认 · ' + (CHOICE_LABELS[choice] || choice);
+      const customWrap = el.querySelector('.diff-custom-wrap');
+      if (customWrap) customWrap.style.display = 'none';
+      updateReviewProgress();
+    }
+
+    function renderReviewView() {
       const s = getCurrent();
-      if (!s) return;
-      const baseV = parseInt(diffBaseSelect.value, 10);
-      const newV = parseInt(diffNewSelect.value, 10);
-      const base = PrdForge.PrdVersions.getVersion(s, baseV);
-      const newer = PrdForge.PrdVersions.getVersion(s, newV);
+      if (!s || !pendingReview) return;
+      const base = PrdForge.PrdVersions.getVersion(s, reviewBaseV);
+      const newer = PrdForge.PrdVersions.getVersion(s, reviewNewV);
       if (!base || !newer) {
-        diffView.innerHTML = '<div class="prd-placeholder">请选择两个版本进行对比</div>';
-        return;
-      }
-      if (baseV === newV) {
-        diffView.innerHTML = '<div class="prd-placeholder">请选择不同的版本</div>';
+        diffView.innerHTML = '<div class="prd-placeholder">无法加载版本对比</div>';
         return;
       }
       currentHunks = PrdForge.PrdVersions.computeDiff(base.content, newer.content);
       diffDecisions = PrdForge.PrdVersions.defaultDecisions(currentHunks);
-      diffView.innerHTML = currentHunks.map(h => renderHunkHtml(h)).join('') +
-        '<div class="diff-apply-bar"><button type="button" class="sketch-btn" id="applyMergeInline">应用合并结果</button></div>';
-      bindHunkActions();
-      document.getElementById('applyMergeInline')?.addEventListener('click', applyMerge);
+      diffView.innerHTML = currentHunks.map(h => renderHunkHtml(h)).join('');
+      diffView.querySelectorAll('.diff-hunk').forEach(el => {
+        const id = el.dataset.id;
+        const hunk = currentHunks.find(x => x.id === id);
+        if (!hunk) return;
+        const customInput = el.querySelector('.diff-custom-input');
+        if (customInput) customInput.value = hunk.newText || hunk.oldText || '';
+        if (hunk.type === 'equal') return;
+        const customWrap = el.querySelector('.diff-custom-wrap');
+        el.querySelectorAll('[data-choice]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const choice = btn.dataset.choice;
+            if (choice === 'custom') {
+              if (customWrap) customWrap.style.display = 'block';
+              customInput?.focus();
+              return;
+            }
+            setHunkDecision(el, hunk, choice);
+          });
+        });
+        el.querySelector('[data-confirm-custom]')?.addEventListener('click', () => {
+          setHunkDecision(el, hunk, 'custom', customInput?.value || '');
+        });
+      });
+      updateReviewProgress();
     }
 
     function renderHunkHtml(h) {
       if (h.type === 'equal') {
-        return `<div class="diff-hunk equal" data-id="${h.id}">
+        return `<div class="diff-hunk equal confirmed" data-id="${h.id}">
           <div class="diff-hunk-label">未改动</div>
           <div class="diff-equal-text">${escapeHtml(h.text)}</div>
         </div>`;
@@ -656,11 +767,15 @@
           <div class="diff-old">${escapeHtml(h.oldText)}</div>
           <div class="diff-new">${escapeHtml(h.newText)}</div>
           <div class="diff-hunk-actions">
-            <button type="button" class="sketch-btn chosen" data-choice="new">采纳新版</button>
+            <button type="button" class="sketch-btn" data-choice="new">采纳新版</button>
             <button type="button" class="sketch-btn" data-choice="old">保留旧版</button>
             <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
           </div>
-          <textarea class="diff-custom-input" style="display:none" placeholder="输入合并后的内容…">${escapeHtml(h.newText)}</textarea>
+          <div class="diff-custom-wrap" style="display:none">
+            <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+            <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
+          </div>
+          <div class="hunk-status"></div>
         </div>`;
       }
       if (h.type === 'add') {
@@ -668,11 +783,15 @@
           <div class="diff-hunk-label">新增</div>
           <div class="diff-new">${escapeHtml(h.newText)}</div>
           <div class="diff-hunk-actions">
-            <button type="button" class="sketch-btn chosen" data-choice="new">采纳</button>
+            <button type="button" class="sketch-btn" data-choice="new">采纳</button>
             <button type="button" class="sketch-btn" data-choice="remove">忽略</button>
             <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
           </div>
-          <textarea class="diff-custom-input" style="display:none" placeholder="输入合并后的内容…">${escapeHtml(h.newText)}</textarea>
+          <div class="diff-custom-wrap" style="display:none">
+            <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+            <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
+          </div>
+          <div class="hunk-status"></div>
         </div>`;
       }
       return `<div class="diff-hunk remove" data-id="${h.id}">
@@ -680,74 +799,47 @@
         <div class="diff-old">${escapeHtml(h.oldText)}</div>
         <div class="diff-hunk-actions">
           <button type="button" class="sketch-btn" data-choice="remove">确认删除</button>
-          <button type="button" class="sketch-btn chosen" data-choice="old">保留原文</button>
+          <button type="button" class="sketch-btn" data-choice="old">保留原文</button>
           <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
         </div>
-        <textarea class="diff-custom-input" style="display:none" placeholder="输入合并后的内容…">${escapeHtml(h.oldText)}</textarea>
+        <div class="diff-custom-wrap" style="display:none">
+          <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+          <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
+        </div>
+        <div class="hunk-status"></div>
       </div>`;
     }
 
-    function bindHunkActions() {
+    function acceptAllReview() {
       diffView.querySelectorAll('.diff-hunk').forEach(el => {
         const id = el.dataset.id;
         const hunk = currentHunks.find(x => x.id === id);
-        if (!hunk || hunk.type === 'equal') return;
-        const customInput = el.querySelector('.diff-custom-input');
-        el.querySelectorAll('[data-choice]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const choice = btn.dataset.choice;
-            el.querySelectorAll('[data-choice]').forEach(b => b.classList.remove('chosen'));
-            btn.classList.add('chosen');
-            if (choice === 'custom') {
-              customInput.style.display = 'block';
-              diffDecisions[id] = { choice: 'custom', text: customInput.value };
-            } else {
-              customInput.style.display = 'none';
-              if (choice === 'new') diffDecisions[id] = { choice: 'new', text: hunk.newText || '' };
-              else if (choice === 'old') diffDecisions[id] = { choice: 'old', text: hunk.oldText || '' };
-              else if (choice === 'remove') diffDecisions[id] = { choice: 'remove', text: '' };
-            }
-          });
-        });
-        customInput?.addEventListener('input', () => {
-          diffDecisions[id] = { choice: 'custom', text: customInput.value };
-          el.querySelectorAll('[data-choice]').forEach(b => b.classList.remove('chosen'));
-          el.querySelector('[data-choice="custom"]')?.classList.add('chosen');
-        });
+        if (!hunk || hunk.type === 'equal' || el.classList.contains('confirmed')) return;
+        const choice = hunk.type === 'remove' ? 'remove' : 'new';
+        setHunkDecision(el, hunk, choice);
       });
     }
 
-    function applyBulkChoice(choice) {
-      currentHunks.forEach(h => {
-        if (h.type === 'equal') diffDecisions[h.id] = { choice: 'equal', text: h.text };
-        else if (choice === 'new') diffDecisions[h.id] = { choice: 'new', text: h.newText || '' };
-        else if (choice === 'old') {
-          if (h.type === 'change' || h.type === 'remove') diffDecisions[h.id] = { choice: 'old', text: h.oldText || '' };
-          else if (h.type === 'add') diffDecisions[h.id] = { choice: 'remove', text: '' };
-        }
-      });
-      renderDiffView();
-      currentHunks.forEach(h => {
-        if (h.type === 'equal') return;
-        const el = diffView.querySelector(`[data-id="${h.id}"]`);
-        if (!el) return;
-        const target = choice === 'new' ? 'new' : (h.type === 'add' ? 'remove' : 'old');
-        el.querySelectorAll('[data-choice]').forEach(b => b.classList.toggle('chosen', b.dataset.choice === target));
-      });
-    }
-
-    async function applyMerge() {
+    async function finishReview() {
       const s = getCurrent();
       if (!s || !currentHunks.length) return;
+      reviewableHunks().forEach(h => {
+        if (!diffDecisions[h.id] || !diffView.querySelector('[data-id="' + h.id + '"]')?.classList.contains('confirmed')) {
+          if (h.type === 'change' || h.type === 'add') diffDecisions[h.id] = { choice: 'new', text: h.newText || '' };
+          else if (h.type === 'remove') diffDecisions[h.id] = { choice: 'remove', text: '' };
+        }
+      });
       const merged = PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions);
       s.prd = merged;
       s.updatedAt = Date.now();
-      PrdForge.PrdVersions.pushVersion(s, merged, '合并 v' + diffBaseSelect.value + '→v' + diffNewSelect.value);
-      selectedVersion = s.prdVersions[s.prdVersions.length - 1].v;
-      await persistCurrent();
+      const entry = PrdForge.PrdVersions.confirmVersion(s, reviewNewV, merged, '第' + reviewNewV + '轮生成（已确认）');
+      selectedVersion = reviewNewV;
+      pendingReview = false;
       prdViewMode = 'view';
-      setPrdViewMode('view');
-      showToast('合并结果已应用为 v' + selectedVersion, 'success');
+      delete diffView.dataset.reviewKey;
+      await persistCurrent();
+      renderPrd();
+      showToast('v' + reviewNewV + ' 已确认', 'success');
     }
 
     function renderPrd() {
@@ -759,7 +851,8 @@
       document.querySelectorAll('.mode-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.mode === prdViewMode);
       });
-      diffControls.classList.toggle('visible', prdViewMode === 'diff' && hasContent && s.status !== 'generating');
+      reviewBar.classList.toggle('visible', pendingReview && prdViewMode === 'review' && hasContent && s.status !== 'generating');
+      editActionBar.classList.toggle('visible', prdViewMode === 'edit' && hasContent && s.status !== 'generating');
       saveEditBtn.style.display = prdViewMode === 'edit' && hasContent ? 'inline-block' : 'none';
 
       if (s.status === 'generating') {
@@ -768,7 +861,7 @@
         prdContent.style.display = s.prd ? 'block' : 'none';
         prdEditor.style.display = 'none';
         diffView.classList.remove('visible');
-        diffControls.classList.remove('visible');
+        reviewBar.classList.remove('visible');
         prdPlaceholder.style.display = s.prd ? 'none' : 'block';
         return;
       }
@@ -796,21 +889,23 @@
         selectedVersion = versions[versions.length - 1].v;
       }
       renderVersionStrip(s);
-      populateDiffSelects(s);
 
-      if (prdViewMode === 'diff') {
+      if (prdViewMode === 'review' && pendingReview) {
         prdContent.style.display = 'none';
         prdEditor.style.display = 'none';
         prdPlaceholder.style.display = 'none';
         diffView.classList.add('visible');
-        renderDiffView();
+        const reviewKey = reviewBaseV + '->' + reviewNewV;
+        if (diffView.dataset.reviewKey !== reviewKey) {
+          diffView.dataset.reviewKey = reviewKey;
+          renderReviewView();
+        }
       } else if (prdViewMode === 'edit') {
         prdContent.style.display = 'none';
         diffView.classList.remove('visible');
         prdEditor.style.display = 'block';
         prdPlaceholder.style.display = 'none';
-        const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
-        prdEditor.value = ver ? ver.content : s.prd;
+        if (!editDirty) loadEditorContent(s);
       } else {
         const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
         renderPrdBody(s, ver ? ver.content : s.prd);
@@ -938,15 +1033,16 @@
       session.updatedAt = Date.now();
       removeTypingBubble();
       const round = (session.messages || []).filter(m => m.role === 'user').length;
-      PrdForge.PrdVersions.pushVersion(session, session.prd, '第' + round + '轮生成');
-      selectedVersion = session.prdVersions[session.prdVersions.length - 1].v;
+      const entry = PrdForge.PrdVersions.pushVersion(
+        session, session.prd, '第' + round + '轮生成',
+        { confirmed: round === 1 }
+      );
+      selectedVersion = entry ? entry.v : session.prdVersions[session.prdVersions.length - 1].v;
       session.messages.push({ role: 'assistant', content: 'PRD 已生成 v' + selectedVersion + '（' + session.prd.length + ' 字）', time: Date.now() });
       await persistCurrent();
       renderMessages();
-      if ((session.prdVersions || []).length >= 2) {
-        prdViewMode = 'diff';
-      }
-      renderPrd();
+      if (round >= 2) startReview(session);
+      else renderPrd();
       renderSessionListPage();
       showToast('PRD 生成成功！', 'success');
       resetSendBtn();
@@ -1017,6 +1113,23 @@
       delete s._prdBackup;
     }
 
+    async function saveEdit() {
+      const s = getCurrent();
+      if (!s) return;
+      const text = prdEditor.value.trim();
+      if (!text) { showToast('内容不能为空', 'error'); return; }
+      s.prd = text;
+      s.updatedAt = Date.now();
+      const entry = PrdForge.PrdVersions.pushVersion(s, text, '手动编辑');
+      if (!entry) { showToast('内容没有变化', 'error'); return; }
+      selectedVersion = entry.v;
+      editDirty = false;
+      editBaseline = text;
+      await persistCurrent();
+      setPrdViewMode('view');
+      showToast('已保存为 v' + selectedVersion, 'success');
+    }
+
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1025,14 +1138,14 @@
     document.getElementById('copyBtn').addEventListener('click', () => {
       const s = getCurrent();
       if (!s || !s.prd) return;
-      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'diff'
+      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'review'
         ? PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions) : s.prd);
       navigator.clipboard.writeText(text).then(() => showToast('已复制', 'success'));
     });
     document.getElementById('downloadBtn').addEventListener('click', () => {
       const s = getCurrent();
       if (!s || !s.prd) return;
-      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'diff'
+      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'review'
         ? PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions) : s.prd);
       const blob = new Blob([text], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -1046,29 +1159,24 @@
     document.querySelectorAll('.mode-tab').forEach(tab => {
       tab.addEventListener('click', () => setPrdViewMode(tab.dataset.mode));
     });
-    diffBaseSelect.addEventListener('change', renderDiffView);
-    diffNewSelect.addEventListener('change', () => {
-      selectedVersion = parseInt(diffNewSelect.value, 10);
-      const s = getCurrent();
-      if (s) renderVersionStrip(s);
-      renderDiffView();
-    });
-    document.getElementById('acceptAllNewBtn').addEventListener('click', () => applyBulkChoice('new'));
-    document.getElementById('keepAllOldBtn').addEventListener('click', () => applyBulkChoice('old'));
-    document.getElementById('applyMergeBtn').addEventListener('click', applyMerge);
-    saveEditBtn.addEventListener('click', async () => {
-      const s = getCurrent();
-      if (!s) return;
-      const text = prdEditor.value.trim();
-      if (!text) { showToast('内容不能为空', 'error'); return; }
-      s.prd = text;
-      s.updatedAt = Date.now();
-      PrdForge.PrdVersions.pushVersion(s, text, '手动编辑');
-      selectedVersion = s.prdVersions[s.prdVersions.length - 1].v;
-      await persistCurrent();
-      prdViewMode = 'view';
+    document.getElementById('acceptAllReviewBtn').addEventListener('click', acceptAllReview);
+    document.getElementById('finishReviewBtn').addEventListener('click', finishReview);
+    saveEditBtn.addEventListener('click', saveEdit);
+    saveEditBarBtn.addEventListener('click', saveEdit);
+    cancelEditBtn.addEventListener('click', () => {
+      if (editDirty && !confirm('放弃未保存的编辑？')) return;
+      editDirty = false;
       setPrdViewMode('view');
-      showToast('已保存为 v' + selectedVersion, 'success');
+    });
+    prdEditor.addEventListener('input', () => {
+      editDirty = prdEditor.value !== editBaseline;
+    });
+    document.addEventListener('keydown', (e) => {
+      if (prdViewMode !== 'edit') return;
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        saveEdit();
+      }
     });
 
     async function init() {
