@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRD Forge - 登录</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Caveat:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper-base: #f5edd6; --paper-warm: #ede0c0; --paper-card: #faf4e4;
+      --paper-border: #c8a97a; --paper-border-lt: #d9c49a;
+      --ink-dark: #2c1a0e; --ink-mid: #5c3d1e; --ink-light: #8b6940; --ink-faint: #b39470;
+      --accent-orange: #d4742a; --radius-paper: 2px;
+      --font-note: 'Caveat', 'Ma Shan Zheng', cursive;
+      --font-body: 'Noto Sans SC', system-ui, sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-body); background: var(--paper-base); color: var(--ink-dark);
+      min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeBlend in='SourceGraphic' mode='multiply'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+    }
+    .card {
+      width: 100%; max-width: 420px; background: var(--paper-card);
+      border: 2px solid var(--paper-border); border-radius: var(--radius-paper);
+      box-shadow: 2px 4px 0 rgba(44,26,14,0.12); padding: 32px 28px;
+    }
+    .brand { font-family: var(--font-note); font-size: 28px; font-weight: 700; color: var(--ink-dark); margin-bottom: 4px; }
+    .subtitle { font-family: var(--font-note); font-size: 15px; color: var(--ink-light); margin-bottom: 24px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tab {
+      flex: 1; padding: 8px; border: 1px solid var(--paper-border-lt);
+      background: transparent; font-family: var(--font-note); font-size: 15px;
+      color: var(--ink-light); cursor: pointer; border-radius: var(--radius-paper);
+    }
+    .tab.active { border-color: var(--paper-border); color: var(--ink-dark); background: rgba(245,237,214,0.6); }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-family: var(--font-note); font-size: 14px; color: var(--ink-mid); margin-bottom: 6px; }
+    .field input {
+      width: 100%; padding: 10px 12px; border: 2px solid var(--paper-border);
+      border-radius: var(--radius-paper); font-family: var(--font-body); font-size: 14px;
+      background: rgba(245,237,214,0.6); color: var(--ink-dark);
+    }
+    .field input:focus { outline: none; border-color: var(--ink-mid); background: var(--paper-card); }
+    .submit-btn {
+      width: 100%; margin-top: 8px; padding: 10px; border: 2px solid var(--paper-border);
+      background: var(--ink-dark); color: var(--paper-base); font-family: var(--font-note);
+      font-size: 16px; cursor: pointer; border-radius: var(--radius-paper);
+    }
+    .submit-btn:hover { background: var(--ink-mid); }
+    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error { color: #8b2020; font-family: var(--font-note); font-size: 14px; margin-top: 12px; min-height: 20px; }
+    .setup-box {
+      background: rgba(245,237,214,0.8); border: 1px dashed var(--paper-border);
+      padding: 14px; margin-bottom: 20px; font-size: 13px; line-height: 1.7; color: var(--ink-mid);
+    }
+    .setup-box a { color: var(--accent-orange); }
+    .back { display: inline-block; margin-top: 16px; font-family: var(--font-note); font-size: 14px; color: var(--ink-light); text-decoration: none; }
+    .back:hover { color: var(--ink-dark); }
+    .hint { font-size: 12px; color: var(--ink-faint); margin-top: 4px; font-family: var(--font-note); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">PRD Forge</div>
+    <div class="subtitle" id="subtitle">登录后保存历史对话，跨设备同步</div>
+
+    <div class="setup-box" id="setupBox" style="display:none">
+      请先在 <code>js/supabase-config.js</code> 填入 Supabase 的 URL 和 anon key。
+      详细步骤见仓库 <a href="docs/SUPABASE_SETUP.md" target="_blank">docs/SUPABASE_SETUP.md</a>。
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button type="button" class="tab active" data-mode="signin">登录</button>
+      <button type="button" class="tab" data-mode="signup">注册</button>
+    </div>
+
+    <form id="authForm">
+      <div class="field">
+        <label for="email">邮箱</label>
+        <input type="email" id="email" required autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="password">密码</label>
+        <input type="password" id="password" required minlength="6" autocomplete="current-password" placeholder="至少 6 位">
+        <div class="hint" id="signupHint" style="display:none">注册后请查收确认邮件（若开启了邮箱验证）</div>
+      </div>
+      <button type="submit" class="submit-btn" id="submitBtn">登录</button>
+      <div class="error" id="errorMsg"></div>
+    </form>
+
+    <a href="index.html" class="back">← 返回首页</a>
+  </div>
+
+  <script src="js/supabase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-client.js"></script>
+  <script>
+    let mode = 'signin';
+    const params = new URLSearchParams(location.search);
+    const redirect = params.get('redirect') || 'index.html';
+    const isSetup = params.get('setup') === '1';
+
+    const setupBox = document.getElementById('setupBox');
+    const tabs = document.getElementById('tabs');
+    const authForm = document.getElementById('authForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const signupHint = document.getElementById('signupHint');
+
+    if (!PrdForge.isConfigured() || isSetup) {
+      setupBox.style.display = 'block';
+      tabs.style.display = 'none';
+      authForm.style.display = 'none';
+      document.getElementById('subtitle').textContent = '需要先配置 Supabase';
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        mode = tab.dataset.mode;
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+        submitBtn.textContent = mode === 'signin' ? '登录' : '注册';
+        signupHint.style.display = mode === 'signup' ? 'block' : 'none';
+        errorMsg.textContent = '';
+        document.getElementById('password').autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+      });
+    });
+
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!PrdForge.isConfigured()) return;
+
+      const sb = PrdForge.getSupabase();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      submitBtn.disabled = true;
+      errorMsg.textContent = '';
+
+      try {
+        if (mode === 'signin') {
+          const { error } = await sb.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        } else {
+          const { error } = await sb.auth.signUp({ email, password });
+          if (error) throw error;
+        }
+        location.href = redirect;
+      } catch (err) {
+        errorMsg.textContent = err.message || '操作失败';
+        submitBtn.disabled = false;
+      }
+    });
+
+    (async function checkExistingSession() {
+      if (!PrdForge.isConfigured()) return;
+      const session = await PrdForge.getSession();
+      if (session) location.href = redirect;
+    })();
+  </script>
+</body>
+</html>

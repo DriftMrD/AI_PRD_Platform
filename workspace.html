@@ -47,6 +47,28 @@
       flex: 1; display: grid; grid-template-columns: 380px 1fr;
       min-height: 0; overflow: hidden;
     }
+    .workspace.hidden, .list-view.hidden { display: none; }
+    .list-view {
+      flex: 1; min-height: 0; overflow: hidden;
+      display: flex; flex-direction: column;
+      max-width: 720px; width: 100%; margin: 0 auto;
+      padding: 24px 20px 32px;
+    }
+    .list-header {
+      font-family: var(--font-note); font-size: 22px; font-weight: 600;
+      color: var(--ink-mid); margin-bottom: 16px; flex-shrink: 0;
+    }
+    .session-list {
+      flex: 1; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .list-empty {
+      font-family: var(--font-note); font-size: 16px; color: var(--ink-faint);
+      text-align: center; padding: 48px 20px;
+    }
+    .list-empty a { color: var(--accent-orange); text-decoration: none; }
+    .list-empty a:hover { text-decoration: underline; }
     .panel-left {
       display: flex; flex-direction: column; border-right: 2px solid var(--paper-border);
       background: var(--paper-card); min-height: 0; height: 100%; overflow: hidden;
@@ -54,18 +76,7 @@
     .history-section {
       flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
     }
-    .session-chips {
-      display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto; flex-shrink: 0;
-      border-bottom: 1px dotted var(--paper-border-lt);
-    }
-    .session-chips:empty { display: none; }
-    .session-chip {
-      flex-shrink: 0; padding: 4px 10px; border: 1px solid var(--paper-border-lt);
-      border-radius: var(--radius-paper); font-family: var(--font-note); font-size: 13px;
-      color: var(--ink-light); cursor: pointer; background: transparent; max-width: 120px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .session-chip.active, .session-chip:hover { border-color: var(--paper-border); color: var(--ink-dark); background: rgba(245,237,214,0.6); }
+    .session-chips { display: none; }
     .section-label {
       padding: 12px 16px 8px; font-family: var(--font-note); font-size: 14px;
       font-weight: 600; color: var(--ink-light); border-bottom: 1px dotted var(--paper-border-lt);
@@ -146,14 +157,40 @@
       text-align: center; padding: 60px 20px;
     }
     .session-item {
-      padding: 8px 10px; border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper);
-      cursor: pointer; transition: all var(--transition-ink); margin-bottom: 6px;
+      padding: 14px 16px; border: 1.5px solid var(--paper-border-lt);
+      border-radius: var(--radius-paper); cursor: pointer;
+      transition: all var(--transition-ink); background: var(--paper-card);
+      box-shadow: var(--shadow-sketch);
     }
-    .session-item:hover, .session-item.active {
+    .session-item:hover {
       border-color: var(--paper-border); background: rgba(245,237,214,0.6);
+      box-shadow: 2px 5px 0 rgba(44,26,14,0.14);
     }
-    .session-item-title { font-family: var(--font-note); font-size: 14px; font-weight: 600; color: var(--ink-mid); }
-    .session-item-time { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+    .session-item-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .session-item-title {
+      font-family: var(--font-note); font-size: 17px; font-weight: 600;
+      color: var(--ink-dark); line-height: 1.3;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+    }
+    .session-item-time { font-size: 12px; color: var(--ink-faint); flex-shrink: 0; font-family: var(--font-body); }
+    .session-item-preview {
+      font-family: var(--font-body); font-size: 13px; color: var(--ink-light);
+      margin-top: 8px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .session-item-meta {
+      display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    }
+    .session-status {
+      font-family: var(--font-note); font-size: 12px; padding: 2px 8px;
+      border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper); color: var(--ink-light);
+    }
+    .session-status.done { color: var(--accent-green); border-color: rgba(90,122,85,0.4); }
+    .session-status.generating, .session-status.pending { color: var(--accent-orange); border-color: rgba(212,116,42,0.4); }
+    .session-status.error { color: #a03020; border-color: rgba(160,48,32,0.4); }
+    .session-item-count { font-size: 12px; color: var(--ink-faint); font-family: var(--font-note); }
     .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 10px 18px; background: var(--ink-dark); color: var(--paper-base);
@@ -163,6 +200,21 @@
     .toast.error { background: #8b2020; }
     .toast.success { background: #3a5c38; }
     @keyframes toastIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+    .header-auth {
+      width: 200px; display: flex; align-items: center; justify-content: flex-end;
+      gap: 8px; flex-shrink: 0;
+    }
+    .auth-email {
+      font-family: var(--font-note); font-size: 12px; color: var(--ink-light);
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .auth-btn, .auth-link {
+      font-family: var(--font-note); font-size: 13px; color: var(--ink-mid);
+      border: 1px solid var(--paper-border-lt); background: transparent;
+      padding: 4px 10px; border-radius: var(--radius-paper); cursor: pointer;
+      text-decoration: none;
+    }
+    .auth-btn:hover, .auth-link:hover { border-color: var(--paper-border); color: var(--ink-dark); }
     @media (max-width: 860px) {
       .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
       .panel-left { border-right: none; border-bottom: 2px solid var(--paper-border); }
@@ -172,15 +224,22 @@
 <body>
   <header class="header">
     <a href="index.html" class="back-link" id="backLink">← 新建需求</a>
-    <div class="header-title" id="sessionTitle">PRD 工作台</div>
-    <div style="width:80px"></div>
+    <div class="header-title" id="sessionTitle">历史记录</div>
+    <div class="header-auth" id="headerAuth"></div>
   </header>
 
-  <div class="workspace">
+  <div class="list-view" id="listView">
+    <div class="list-header">我的 PRD 历史</div>
+    <div class="session-list" id="sessionList"></div>
+    <div class="list-empty" id="listEmpty" style="display:none">
+      暂无历史记录，<a href="index.html" id="listEmptyLink">去新建需求</a>
+    </div>
+  </div>
+
+  <div class="workspace hidden" id="detailView">
     <aside class="panel-left">
       <div class="history-section">
-        <div class="section-label">历史对话</div>
-        <div class="session-chips" id="sessionChips"></div>
+        <div class="section-label">对话</div>
         <div class="history-list" id="messageList">
           <div class="history-empty" id="messageEmpty">开始对话后，消息会显示在这里</div>
         </div>
@@ -211,8 +270,10 @@
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <script src="js/supabase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-client.js"></script>
   <script>
-    const STORAGE_KEY = 'prd_forge_sessions';
     const PENDING_KEY = 'prd_forge_pending';
     const DEFAULT_API_BASE = 'https://prd-forge-backend.onrender.com';
 
@@ -223,12 +284,21 @@
       return DEFAULT_API_BASE;
     }
     const API_BASE = getApiBase();
+    const INDEX_HREF = (() => {
+      const api = new URLSearchParams(location.search).get('api');
+      return api ? 'index.html?api=' + encodeURIComponent(api) : 'index.html';
+    })();
 
     let sessions = [];
     let currentId = null;
     let generating = false;
+    let viewMode = 'list';
 
-    const sessionChips = document.getElementById('sessionChips');
+    const listView = document.getElementById('listView');
+    const detailView = document.getElementById('detailView');
+    const sessionListEl = document.getElementById('sessionList');
+    const listEmpty = document.getElementById('listEmpty');
+    const backLink = document.getElementById('backLink');
     const messageList = document.getElementById('messageList');
     const messageEmpty = document.getElementById('messageEmpty');
     const chatInput = document.getElementById('chatInput');
@@ -238,10 +308,94 @@
     const prdTitle = document.getElementById('prdTitle');
     const sessionTitle = document.getElementById('sessionTitle');
 
-    function loadSessions() {
-      try { sessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { sessions = []; }
+    function statusLabel(status) {
+      return { pending: '待生成', generating: '生成中', done: '已完成', error: '失败' }[status] || status;
     }
-    function saveSessions() { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)); }
+
+    function sessionPreview(s) {
+      const userMsg = (s.messages || []).find(m => m.role === 'user');
+      if (userMsg) return userMsg.content.slice(0, 80);
+      if (s.prd) return s.prd.slice(0, 80);
+      return '暂无内容';
+    }
+
+    function updateUrl(sessionId) {
+      const params = new URLSearchParams(location.search);
+      if (sessionId) params.set('session', sessionId);
+      else params.delete('session');
+      const qs = params.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+
+    function showListView() {
+      viewMode = 'list';
+      currentId = null;
+      listView.classList.remove('hidden');
+      detailView.classList.add('hidden');
+      backLink.textContent = '← 新建需求';
+      backLink.href = INDEX_HREF;
+      backLink.onclick = null;
+      sessionTitle.textContent = '历史记录';
+      updateUrl(null);
+      renderSessionListPage();
+    }
+
+    function openSession(id) {
+      const s = sessions.find(x => x.id === id);
+      if (!s) return;
+      viewMode = 'detail';
+      currentId = id;
+      listView.classList.add('hidden');
+      detailView.classList.remove('hidden');
+      backLink.textContent = '← 历史列表';
+      backLink.href = '#list';
+      backLink.onclick = (e) => { e.preventDefault(); showListView(); };
+      sessionTitle.textContent = s.title || 'PRD 工作台';
+      updateUrl(id);
+      renderMessages();
+      renderPrd();
+    }
+
+    function renderSessionListPage() {
+      if (!sessions.length) {
+        sessionListEl.innerHTML = '';
+        listEmpty.style.display = 'block';
+        return;
+      }
+      listEmpty.style.display = 'none';
+      sessionListEl.innerHTML = sessions.map(s => {
+        const rounds = (s.messages || []).filter(m => m.role === 'user').length;
+        return `<article class="session-item" data-id="${s.id}" tabindex="0" role="button">
+          <div class="session-item-head">
+            <div class="session-item-title">${escapeHtml(s.title || '未命名')}</div>
+            <div class="session-item-time">${formatTime(s.updatedAt || s.createdAt)}</div>
+          </div>
+          <div class="session-item-preview">${escapeHtml(sessionPreview(s))}</div>
+          <div class="session-item-meta">
+            <span class="session-status ${escapeHtml(s.status || 'pending')}">${statusLabel(s.status)}</span>
+            <span class="session-item-count">${rounds} 轮对话${s.prd ? ' · ' + s.prd.length + ' 字' : ''}</span>
+          </div>
+        </article>`;
+      }).join('');
+
+      sessionListEl.querySelectorAll('.session-item').forEach(el => {
+        const id = el.dataset.id;
+        el.addEventListener('click', () => openSession(id));
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSession(id); }
+        });
+      });
+    }
+
+    async function persistCurrent() {
+      const s = getCurrent();
+      if (!s || !s.id) return;
+      try {
+        await PrdForge.SessionStore.save(s);
+      } catch (e) {
+        showToast('保存失败：' + e.message, 'error');
+      }
+    }
 
     function getCurrent() { return sessions.find(s => s.id === currentId); }
 
@@ -266,26 +420,9 @@
       setTimeout(() => t.remove(), 3000);
     }
 
-    function renderSessionList() {
-      if (sessions.length <= 1) {
-        sessionChips.innerHTML = '';
-        return;
-      }
-      sessionChips.innerHTML = sessions.map(s =>
-        `<button class="session-chip ${s.id === currentId ? 'active' : ''}" data-id="${s.id}">${escapeHtml(s.title || '未命名')}</button>`
-      ).join('');
-      sessionChips.querySelectorAll('.session-chip').forEach(el => {
-        el.addEventListener('click', () => switchSession(el.dataset.id));
-      });
-    }
-
     function renderMessages() {
       const s = getCurrent();
-      if (!s) {
-        messageEmpty.style.display = 'block';
-        messageList.querySelectorAll('.msg-bubble').forEach(el => el.remove());
-        return;
-      }
+      if (!s || viewMode !== 'detail') return;
       messageEmpty.style.display = s.messages.length ? 'none' : 'block';
       messageList.querySelectorAll('.msg-bubble').forEach(el => el.remove());
       s.messages.forEach(m => {
@@ -296,7 +433,6 @@
       });
       messageList.scrollTop = messageList.scrollHeight;
       sessionTitle.textContent = s.title || 'PRD 工作台';
-      renderSessionList();
     }
 
     function renderPrd() {
@@ -317,26 +453,13 @@
       }
     }
 
-    function switchSession(id) {
-      currentId = id;
-      renderMessages();
-      renderPrd();
-    }
+    function switchSession(id) { openSession(id); }
 
-    function createSession(pending) {
-      const id = 's_' + Date.now();
-      const title = (pending.text || '').trim().slice(0, 24) || '新需求';
-      const session = {
-        id, title, createdAt: Date.now(), updatedAt: Date.now(),
-        config: { template: pending.template, language: pending.language, detail: pending.detail, role: pending.role },
-        files: pending.files || [],
-        messages: [{ role: 'user', content: pending.text, time: Date.now() }],
-        prd: '', status: 'pending', autoStart: true
-      };
+    async function createSession(pending) {
+      const session = await PrdForge.SessionStore.create(pending);
+      session.autoStart = true;
       sessions.unshift(session);
-      if (sessions.length > 50) sessions = sessions.slice(0, 50);
-      saveSessions();
-      return id;
+      return session.id;
     }
 
     function base64ToBlob(b64, type) {
@@ -358,7 +481,7 @@
       prdContent.style.display = 'none';
       prdPlaceholder.textContent = statusMsg || '正在连接后端，等待模型返回首字…';
       prdPlaceholder.style.display = 'block';
-      saveSessions();
+      await persistCurrent();
       renderPrd();
       addTypingBubble(statusMsg || '正在生成 PRD，请稍候…');
 
@@ -451,9 +574,10 @@
       session.updatedAt = Date.now();
       removeTypingBubble();
       session.messages.push({ role: 'assistant', content: 'PRD 已生成（' + session.prd.length + ' 字）', time: Date.now() });
-      saveSessions();
+      await persistCurrent();
       renderMessages();
       renderPrd();
+      renderSessionListPage();
       showToast('PRD 生成成功！', 'success');
       resetSendBtn();
     }
@@ -473,8 +597,10 @@
         session.prd = session._prdBackup;
         delete session._prdBackup;
       }
-      saveSessions();
-      renderPrd();
+      persistCurrent().then(() => {
+        renderPrd();
+        renderSessionListPage();
+      });
       showToast(msg, 'error');
       resetSendBtn();
     }
@@ -510,7 +636,7 @@
       s.messages.push({ role: 'user', content: text, time: Date.now() });
       s.updatedAt = Date.now();
       chatInput.value = '';
-      saveSessions();
+      await persistCurrent();
       renderMessages();
 
       const context = s.messages.filter(m => m.role === 'user').map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
@@ -544,30 +670,46 @@
     });
 
     async function init() {
-      const api = new URLSearchParams(location.search).get('api');
-      if (api) document.getElementById('backLink').href = 'index.html?api=' + encodeURIComponent(api);
+      const authSession = await PrdForge.requireAuth();
+      if (!authSession) return;
+      await PrdForge.renderAuthHeader('headerAuth');
 
-      loadSessions();
+      backLink.href = INDEX_HREF;
+      const listEmptyLink = document.getElementById('listEmptyLink');
+      if (listEmptyLink) listEmptyLink.href = INDEX_HREF;
+
+      try {
+        const migrated = await PrdForge.SessionStore.migrateLocalSessions();
+        if (migrated > 0) showToast('已迁移 ' + migrated + ' 条本地历史到云端', 'success');
+        sessions = await PrdForge.SessionStore.loadAll();
+      } catch (e) {
+        showToast('加载历史失败：' + e.message, 'error');
+        sessions = [];
+      }
+
       const pendingRaw = sessionStorage.getItem(PENDING_KEY);
+      const urlSessionId = new URLSearchParams(location.search).get('session');
+
       if (pendingRaw) {
         sessionStorage.removeItem(PENDING_KEY);
         try {
           const pending = JSON.parse(pendingRaw);
-          currentId = createSession(pending);
-        } catch { /* ignore */ }
-      } else if (sessions.length) {
-        currentId = sessions[0].id;
-      }
-
-      renderMessages();
-      if (currentId) {
-        switchSession(currentId);
-        const s = getCurrent();
-        if (s && s.autoStart && s.status === 'pending') {
-          s.autoStart = false;
-          saveSessions();
-          await runGenerate(s, s.messages[0].content);
+          const newId = await createSession(pending);
+          openSession(newId);
+          const s = getCurrent();
+          if (s && s.autoStart && s.status === 'pending') {
+            s.autoStart = false;
+            await persistCurrent();
+            await runGenerate(s, s.messages[0].content);
+          }
+        } catch (e) {
+          showToast('创建会话失败：' + e.message, 'error');
+          showListView();
         }
+      } else if (urlSessionId && sessions.some(s => s.id === urlSessionId)) {
+        openSession(urlSessionId);
+      } else {
+        showListView();
       }
     }
 

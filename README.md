@@ -7,6 +7,12 @@
 ```
 AI_PRD_Platform/
 ├── index.html                       # 单文件前端：上传 / 流式渲染 / 导出
+├── workspace.html                   # 工作台：对话 + PRD 预览
+├── login.html                       # 登录 / 注册
+├── js/
+│   ├── supabase-config.js           # Supabase URL + anon key（需自行填写）
+│   └── supabase-client.js           # Auth + 会话云端存储
+├── supabase/schema.sql              # 数据库建表 + RLS
 ├── prd-template.md                  # 标准 PRD 模板（生成目标）
 ├── SKILL.md                         # PRD → 模板的转换规则（载入到 LLM 提示词）
 ├── docs/
@@ -84,6 +90,25 @@ https://driftmrd.github.io/AI_PRD_Platform/?api=https://your-backend.example.com
 ```
 
 只要后端 `CORS_ORIGINS` 里包含 `https://driftmrd.github.io` 即可跨域。
+
+### 3. 配置 Supabase（用户登录 + 历史云端存储）
+
+**一键配置（推荐）**：
+
+```bash
+cp .env.supabase.example .env.supabase
+# 编辑 .env.supabase，填入 URL、anon key、Access Token（见下方说明）
+node scripts/setup-supabase.mjs
+```
+
+Access Token 获取：Supabase Dashboard → 右上角头像 → **Account** → **Access Tokens** → Generate。
+
+手动步骤见 **[docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md)**。
+
+配置完成后：
+- 未登录用户无法生成 PRD（会跳转登录页）
+- 历史对话保存在 Supabase，按账号隔离
+- 旧版 localStorage 历史会在首次登录时自动迁移
 
 ## 技术栈
 
