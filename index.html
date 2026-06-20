@@ -58,7 +58,7 @@
       pointer-events: none; z-index: 0;
     }
 
-    .header, .main, .toast-container { position: relative; z-index: 1; }
+    .header, .main { position: relative; z-index: 1; }
 
     .header {
       background: var(--paper-warm);
@@ -171,7 +171,6 @@
       overflow: hidden; transition: box-shadow var(--transition-ink);
       position: relative;
       background-image: repeating-linear-gradient(to bottom, transparent 0px, transparent 27px, rgba(180,150,100,0.07) 27px, rgba(180,150,100,0.07) 28px);
-      filter: url(#wobble-subtle);
       transform: rotate(-0.15deg);
     }
 
@@ -247,6 +246,27 @@
     }
 
     .textarea-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding: 0 2px; }
+
+    .submit-footer-wrap { padding: 10px 20px 20px; }
+
+    .generate-btn { padding: 6px 60px; font-size: 14px; }
+
+    .submit-hint {
+      font-family: var(--font-note);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.3;
+      padding-right: 2px;
+      text-align: right;
+      max-width: 52%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .submit-hint[hidden] { display: none; }
+    .submit-hint.is-error { color: #d92d20; }
+    .submit-hint.is-success { color: var(--accent-green); }
+    .submit-hint.is-warn { color: var(--accent-orange); }
 
     .char-count { font-family: var(--font-note); font-size: 12px; color: var(--ink-faint); }
 
@@ -354,8 +374,6 @@
       filter: url(#wobble-line);
     }
 
-    .submit-section { padding: 14px 20px 20px; }
-
     .submit-btn {
       display: none;
     }
@@ -400,28 +418,11 @@
 
     .footer { text-align: center; padding: 36px 24px; font-family: var(--font-note); font-size: 14px; color: var(--ink-faint); }
 
-    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
-
-    .toast {
-      padding: 10px 18px; background: var(--ink-dark); color: var(--paper-base);
-      border-radius: var(--radius-paper); font-family: var(--font-note); font-size: 15px;
-      font-weight: 500; box-shadow: 3px 3px 0 var(--ink-mid); animation: toastIn 0.25s ease;
-      display: flex; align-items: center; gap: 8px; border: 2px solid var(--ink-mid);
-      filter: url(#wobble-subtle);
-    }
-
-    .toast.error   { background: #8b2020; border-color: #6a1818; box-shadow: 3px 3px 0 #6a1818; }
-    .toast.success { background: #3a5c38; border-color: #2e4a2c; box-shadow: 3px 3px 0 #2e4a2c; }
-
-    @keyframes toastIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
-    .toast-out { animation: toastOut 0.25s ease forwards; }
-    @keyframes toastOut { to { opacity: 0; transform: translateX(16px); } }
-
     @media (max-width: 640px) {
       .main { padding: 28px 16px 60px; }
       .page-title { font-size: 28px; }
       .page-header::before, .page-header::after { display: none; }
-      .card-header, .input-body, .submit-section { padding-left: 14px; padding-right: 14px; }
+      .card-header, .input-body, .submit-footer-wrap { padding-left: 14px; padding-right: 14px; }
       .result-header, .result-body { padding-left: 14px; padding-right: 14px; }
       .header-inner { padding: 0 18px; }
       .nav-link:not(.active) { display: none; }
@@ -502,12 +503,14 @@
         </div>
       </div>
       <hr class="rule-hand">
-      <div class="submit-section" style="text-align:center; padding-bottom:32px;">
-        <button class="quick-btn" onclick="generatePRD()" style="padding:6px 60px;font-size:14px;">生成 PRD 文档</button>
+      <div class="submit-footer-wrap">
+        <div class="textarea-footer">
+          <button class="quick-btn generate-btn" type="button" onclick="generatePRD()">生成 PRD 文档</button>
+          <span class="submit-hint" id="submitHint" hidden></span>
+        </div>
       </div>
     </div>
   </main>
-  <div class="toast-container" id="toastContainer"></div>
   <script src="js/supabase-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-client.js"></script>
@@ -516,17 +519,96 @@
     const charCount = document.getElementById('charCount');
     const textareaWrap = document.getElementById('textareaWrap');
     const dropzoneOverlay = document.getElementById('dropzoneOverlay');
-    mainInput.addEventListener('input', () => { charCount.textContent = mainInput.value.length; });
+    const DRAFT_KEY = 'prd_forge_draft';
+    let draftSaveTimer = null;
+    let submitHintTimer = null;
+
+    mainInput.addEventListener('input', () => {
+      charCount.textContent = mainInput.value.length;
+      scheduleSaveDraft();
+      clearSubmitHint();
+    });
+
+    function showSubmitHint(message, kind, autoHideMs) {
+      const el = document.getElementById('submitHint');
+      if (!el) return;
+      clearTimeout(submitHintTimer);
+      el.textContent = message;
+      el.className = 'submit-hint is-' + (kind || 'error');
+      el.removeAttribute('hidden');
+      const ms = autoHideMs ?? (kind === 'success' ? 2500 : 0);
+      if (ms > 0) submitHintTimer = setTimeout(clearSubmitHint, ms);
+    }
+
+    function clearSubmitHint() {
+      clearTimeout(submitHintTimer);
+      const el = document.getElementById('submitHint');
+      if (!el) return;
+      el.setAttribute('hidden', '');
+      el.textContent = '';
+      el.className = 'submit-hint';
+    }
+
+    function scheduleSaveDraft() {
+      clearTimeout(draftSaveTimer);
+      draftSaveTimer = setTimeout(() => { saveDraft().catch(() => {}); }, 400);
+    }
+
+    async function saveDraft() {
+      const files = [];
+      for (const f of uploadedFiles) {
+        files.push({ name: f.name, type: f.type, size: f.size, data: await fileToBase64(f) });
+      }
+      for (const f of restoredFilePayloads) files.push(f);
+      const payload = { text: mainInput.value, files };
+      if (!payload.text.trim() && !payload.files.length) {
+        sessionStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    }
+
+    function restoreDraft() {
+      try {
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        if (!raw) return false;
+        const draft = JSON.parse(raw);
+        if (typeof draft.text === 'string') {
+          mainInput.value = draft.text;
+          charCount.textContent = draft.text.length;
+        }
+        if (Array.isArray(draft.files) && draft.files.length) {
+          restoredFilePayloads = draft.files;
+          renderFileChips();
+        }
+        return !!(draft.text?.trim() || draft.files?.length);
+      } catch {
+        return false;
+      }
+    }
+
+    function clearDraft() {
+      sessionStorage.removeItem(DRAFT_KEY);
+      restoredFilePayloads = [];
+    }
+
     function insertTemplate() {
       const t = '## 产品背景\n\n请描述产品的业务背景、目标用户群体以及要解决的核心问题。\n\n## 产品目标\n\n1. \n2. \n3. \n\n## 功能需求\n\n### 功能一：\n- 需求描述：\n- 验收标准：\n\n### 功能二：\n- 需求描述：\n- 验收标准：\n\n## 非功能需求\n\n- 性能：\n- 安全：\n- 兼容性：';
       mainInput.value = t; charCount.textContent = mainInput.value.length;
-      mainInput.focus(); showToast('已插入模板，请按需填写', 'success');
+      mainInput.focus(); showSubmitHint('已插入模板，请按需填写', 'success');
+      scheduleSaveDraft();
     }
-    function clearInput() { mainInput.value = ''; uploadedFiles = []; renderFileChips(); charCount.textContent = '0'; showToast('已清空输入', 'success'); }
+    function clearInput() {
+      mainInput.value = ''; uploadedFiles = []; restoredFilePayloads = [];
+      renderFileChips(); charCount.textContent = '0';
+      sessionStorage.removeItem(DRAFT_KEY);
+      showSubmitHint('已清空输入', 'success');
+    }
     const uploadTrigger = document.getElementById('uploadTrigger');
     const fileInput = document.getElementById('fileInput');
     const inlineFiles = document.getElementById('inlineFiles');
     let uploadedFiles = [];
+    let restoredFilePayloads = [];
     uploadTrigger.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
     let dragCounter = 0;
@@ -535,13 +617,29 @@
     document.addEventListener('dragover', (e) => e.preventDefault());
     document.addEventListener('drop', (e) => { e.preventDefault(); dragCounter = 0; dropzoneOverlay.classList.remove('show'); if (e.dataTransfer && e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files); });
     function handleFiles(files) {
-      Array.from(files).forEach(file => { if (file.size > 20*1024*1024) { showToast('文件 ' + file.name + ' 超过 20MB 限制', 'error'); return; } if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) { showToast('文件 ' + file.name + ' 已存在', 'error'); return; } uploadedFiles.push(file); });
-      renderFileChips(); if (files.length > 0) showToast('已添加 ' + files.length + ' 个文件', 'success');
+      Array.from(files).forEach(file => {
+        if (file.size > 20 * 1024 * 1024) { showSubmitHint('文件 ' + file.name + ' 超过 20MB 限制', 'error'); return; }
+        if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) { showSubmitHint('文件 ' + file.name + ' 已存在', 'warn'); return; }
+        uploadedFiles.push(file);
+      });
+      renderFileChips();
+      if (files.length > 0) showSubmitHint('已添加 ' + files.length + ' 个文件', 'success');
+      scheduleSaveDraft();
     }
     function renderFileChips() {
-      inlineFiles.innerHTML = uploadedFiles.map((file, index) => '<div class="file-chip"><div class="file-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="file-chip-name">' + escapeHtml(file.name) + '</span><span class="file-chip-size">' + formatSize(file.size) + '</span><button class="file-chip-remove" onclick="removeFile(' + index + ')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>').join('');
+      const chips = [];
+      uploadedFiles.forEach((file, index) => chips.push({ name: file.name, size: file.size, index, source: 'live' }));
+      restoredFilePayloads.forEach((file, index) => chips.push({ name: file.name, size: file.size, index, source: 'restored' }));
+      inlineFiles.innerHTML = chips.map(({ name, size, index, source }) =>
+        '<div class="file-chip"><div class="file-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="file-chip-name">' + escapeHtml(name) + '</span><span class="file-chip-size">' + formatSize(size) + '</span><button class="file-chip-remove" onclick="removeFile(' + index + ', \'' + source + '\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>'
+      ).join('');
     }
-    function removeFile(index) { uploadedFiles.splice(index, 1); renderFileChips(); }
+    function removeFile(index, source) {
+      if (source === 'restored') restoredFilePayloads.splice(index, 1);
+      else uploadedFiles.splice(index, 1);
+      renderFileChips();
+      scheduleSaveDraft();
+    }
     function formatSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB'; return (bytes/(1024*1024)).toFixed(1) + ' MB'; }
     function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
     const DEFAULT_GEN_CONFIG = { template: 'standard', language: 'zh', detail: 'standard', role: 'pm' };
@@ -553,24 +651,26 @@
         reader.readAsDataURL(file);
       });
     }
+    function showLoginHint() { showSubmitHint('请先登录', 'error'); }
+
+    function hideLoginHint() { clearSubmitHint(); }
+
     async function generatePRD() {
       const hasText = mainInput.value.trim().length > 0;
       const hasFiles = uploadedFiles.length > 0;
-      if (!hasText && !hasFiles) { showToast('请输入需求内容或上传文件', 'error'); return; }
+      if (!hasText && !hasFiles) { showSubmitHint('请输入需求内容或上传文件', 'error'); return; }
 
       if (!PrdForge.isConfigured()) {
-        showToast('请先配置 Supabase（见 docs/SUPABASE_SETUP.md）', 'error');
-        location.href = 'login.html?setup=1';
+        showSubmitHint('请先配置 Supabase', 'error');
         return;
       }
       const session = await PrdForge.getSession();
       if (!session) {
-        showToast('请先登录后再生成 PRD', 'error');
-        const api = new URLSearchParams(location.search).get('api');
-        const redirect = 'workspace.html' + (api ? '?api=' + encodeURIComponent(api) : '');
-        location.href = 'login.html?redirect=' + encodeURIComponent(redirect);
+        await saveDraft();
+        showLoginHint();
         return;
       }
+      hideLoginHint();
 
       const cfg = {
         text: mainInput.value,
@@ -581,22 +681,17 @@
         for (const f of uploadedFiles) {
           cfg.files.push({ name: f.name, type: f.type, size: f.size, data: await fileToBase64(f) });
         }
+        cfg.files.push(...restoredFilePayloads);
       } catch (e) {
-        showToast('文件读取失败：' + e.message, 'error');
+        showSubmitHint('文件读取失败：' + e.message, 'error');
         return;
       }
+      clearSubmitHint();
+      clearDraft();
+      uploadedFiles = [];
       sessionStorage.setItem('prd_forge_pending', JSON.stringify(cfg));
       const api = new URLSearchParams(location.search).get('api');
       location.href = 'workspace.html' + (api ? '?api=' + encodeURIComponent(api) : '');
-    }
-    function showToast(message, type) {
-      type = type || 'info';
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = 'toast ' + type;
-      toast.textContent = message;
-      container.appendChild(toast);
-      setTimeout(() => { toast.classList.add('toast-out'); toast.addEventListener('animationend', () => toast.remove()); }, 3000);
     }
 
     (async function initPage() {
@@ -604,6 +699,9 @@
       const historyLink = document.getElementById('historyLink');
       if (api && historyLink) historyLink.href = 'workspace.html?api=' + encodeURIComponent(api);
       await PrdForge.renderAuthHeader('headerAuth');
+      window.saveDraftBeforeLogin = saveDraft;
+      restoreDraft();
+      if (await PrdForge.getSession()) hideLoginHint();
     })();
   </script>
 </body>

@@ -51,7 +51,8 @@
   PrdForge.signOut = async function () {
     const sb = PrdForge.getSupabase();
     if (sb) await sb.auth.signOut();
-    location.href = 'login.html';
+    const returnTo = encodeURIComponent('index.html' + (location.search || ''));
+    location.href = 'login.html?redirect=' + returnTo;
   };
 
   PrdForge.renderAuthHeader = async function (containerId) {
@@ -65,7 +66,16 @@
 
     const session = await PrdForge.getSession();
     if (!session) {
-      el.innerHTML = '<a href="login.html" class="auth-link">登录</a>';
+      const returnTo = encodeURIComponent(location.pathname.split('/').pop() + location.search);
+      const loginHref = 'login.html?redirect=' + returnTo;
+      el.innerHTML = '<a href="' + loginHref + '" class="auth-link" id="headerLoginLink">登录</a>';
+      document.getElementById('headerLoginLink')?.addEventListener('click', async (e) => {
+        if (typeof window.saveDraftBeforeLogin === 'function') {
+          e.preventDefault();
+          try { await window.saveDraftBeforeLogin(); } catch { /* ignore */ }
+          location.href = loginHref;
+        }
+      });
       return;
     }
 
