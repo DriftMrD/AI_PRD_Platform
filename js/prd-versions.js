@@ -126,6 +126,9 @@
       label: label || ('v' + v),
       confirmed: opts && opts.confirmed === false ? false : true
     };
+    if (opts && typeof opts.messageCount === 'number') {
+      entry.messageCount = opts.messageCount;
+    }
     session.prdVersions.push(entry);
     return entry;
   }
@@ -138,12 +141,67 @@
     entry.content = content;
     entry.confirmed = true;
     entry.confirmedAt = Date.now();
+    entry.ignored = false;
+    delete entry.ignoredAt;
     if (label) entry.label = label;
+    return entry;
+  }
+
+  function ignoreVersion(session, v, label) {
+    if (!session.prdVersions) session.prdVersions = [];
+    const entry = session.prdVersions.find(x => x.v === v);
+    if (!entry) return null;
+    entry.ignored = true;
+    entry.confirmed = false;
+    entry.ignoredAt = Date.now();
+    entry.label = label || ((entry.label || 'v' + v).replace(/（已忽略）$/, '') + '（已忽略）');
     return entry;
   }
 
   function getVersion(session, v) {
     return (session.prdVersions || []).find(x => x.v === v);
+  }
+
+  function truncateMessagesForVersion(messages, targetV, versionEntry) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== 'assistant') continue;
+      if (m.content.includes('v' + targetV)) return messages.slice(0, i + 1);
+    }
+    if (versionEntry?.label?.includes('手动编辑')) return messages.slice();
+    if (targetV === 1) {
+      const firstUser = messages.findIndex(m => m.role === 'user');
+      if (firstUser < 0) return messages.slice();
+      let end = firstUser;
+      if (messages[end + 1]?.role === 'assistant') end++;
+      return messages.slice(0, end + 1);
+    }
+    return messages.slice();
+  }
+
+  /** 回退到指定版本：截断 PRD 版本链与对话，删除其后所有版本。 */
+  function rollbackToVersion(session, targetV) {
+    const versions = session.prdVersions || [];
+    const idx = versions.findIndex(x => x.v === targetV);
+    if (idx < 0 || idx >= versions.length - 1) return null;
+
+    const target = versions[idx];
+    const removedVersions = versions.slice(idx + 1);
+    session.prdVersions = versions.slice(0, idx + 1);
+    target.ignored = false;
+    target.confirmed = true;
+    delete target.ignoredAt;
+
+    session.prd = target.content;
+    const messages = session.messages || [];
+    if (typeof target.messageCount === 'number') {
+      session.messages = messages.slice(0, target.messageCount);
+    } else {
+      session.messages = truncateMessagesForVersion(messages, targetV, target);
+    }
+
+    session.updatedAt = Date.now();
+    return { target, removedVersions };
   }
 
   window.PrdForge = window.PrdForge || {};
@@ -154,6 +212,8 @@
     buildMergedText,
     pushVersion,
     confirmVersion,
+    ignoreVersion,
+    rollbackToVersion,
     getVersion
   };
 })();

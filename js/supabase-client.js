@@ -155,6 +155,15 @@
       if (error) throw new Error(error.message);
     },
 
+    async delete(sessionId) {
+      const sb = PrdForge.getSupabase();
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) throw new Error('未登录');
+
+      const { error } = await sb.from('prd_sessions').delete().eq('id', sessionId);
+      if (error) throw new Error(error.message);
+    },
+
     async create(pending) {
       const sb = PrdForge.getSupabase();
       const { data: { user } } = await sb.auth.getUser();

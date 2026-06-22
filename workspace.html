@@ -162,6 +162,8 @@
     }
     .version-chip:hover { border-color: var(--paper-border); background: rgba(44,26,14,0.04); }
     .version-chip.active { border-color: var(--accent-orange); color: var(--accent-orange); background: rgba(212,116,42,0.08); }
+    .version-chip.ignored { opacity: 0.65; border-style: dashed; color: var(--ink-faint); }
+    .version-chip.ignored.active { opacity: 1; color: var(--ink-light); border-color: var(--ink-faint); }
     .view-mode-tabs { display: flex; gap: 4px; flex-shrink: 0; }
     .mode-tab {
       font-family: var(--font-note); font-size: 13px; padding: 4px 12px;
@@ -187,6 +189,21 @@
     .review-progress {
       font-family: var(--font-note); font-size: 13px; color: var(--ink-light);
     }
+    .review-nav {
+      display: flex; gap: 4px; align-items: center;
+    }
+    .review-nav-btn {
+      width: 30px; height: 30px; padding: 0;
+      border: 1px solid var(--paper-border); border-radius: var(--radius-paper);
+      background: var(--paper-card); color: var(--ink-mid);
+      font-family: var(--font-note); font-size: 14px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .review-nav-btn:hover:not(:disabled) {
+      border-color: var(--accent-orange); color: var(--accent-orange);
+      background: rgba(212,116,42,0.06);
+    }
+    .review-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .review-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .prd-body {
       flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
@@ -239,6 +256,11 @@
     .diff-hunk-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .diff-hunk-actions .sketch-btn { font-size: 12px; padding: 3px 10px; }
     .diff-hunk.confirmed { border-color: rgba(90,122,85,0.45); background: rgba(90,122,85,0.04); }
+    .diff-hunk.review-focus {
+      outline: 2px solid var(--accent-orange);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(212,116,42,0.12);
+    }
     .hunk-status {
       font-family: var(--font-note); font-size: 13px; color: var(--accent-green);
       margin-top: 8px; display: none;
@@ -265,6 +287,12 @@
     .edit-action-bar.visible { display: flex; }
     .edit-hint {
       font-family: var(--font-note); font-size: 13px; color: var(--ink-light); flex: 1;
+    }
+    .sketch-btn.warn {
+      color: #8b3030; border-color: rgba(160,48,32,0.45);
+    }
+    .sketch-btn.warn:hover {
+      background: rgba(160,48,32,0.08); border-color: #a03020;
     }
     .sketch-btn.primary {
       border-color: var(--accent-orange); color: var(--paper-card);
@@ -307,7 +335,17 @@
     .session-status.done { color: var(--accent-green); border-color: rgba(90,122,85,0.4); }
     .session-status.generating, .session-status.pending { color: var(--accent-orange); border-color: rgba(212,116,42,0.4); }
     .session-status.error { color: #a03020; border-color: rgba(160,48,32,0.4); }
-    .session-item-count { font-size: 12px; color: var(--ink-faint); font-family: var(--font-note); }
+    .session-item-count { font-size: 12px; color: var(--ink-faint); font-family: var(--font-note); flex: 1; }
+    .session-delete-btn {
+      font-family: var(--font-note); font-size: 12px; padding: 2px 8px;
+      border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper);
+      background: transparent; color: var(--ink-faint); cursor: pointer;
+      transition: all var(--transition-ink); flex-shrink: 0;
+    }
+    .session-delete-btn:hover {
+      color: #a03020; border-color: rgba(160,48,32,0.45);
+      background: rgba(160,48,32,0.06);
+    }
     .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 10px 18px; background: var(--ink-dark); color: var(--paper-base);
@@ -374,6 +412,7 @@
       <div class="prd-header">
         <div class="prd-title" id="prdTitle"><span class="dot warm"></span> 等待生成…</div>
         <div class="prd-actions">
+          <button type="button" class="sketch-btn warn" id="rollbackVersionBtn" style="display:none" title="回退到当前选中的历史版本">回退到此版本</button>
           <button type="button" class="sketch-btn" id="saveEditBtn" style="display:none">保存编辑</button>
           <button class="sketch-btn" id="copyBtn">复制</button>
           <button class="sketch-btn" id="downloadBtn">下载</button>
@@ -391,7 +430,12 @@
       <div class="review-bar" id="reviewBar">
         <div class="review-title" id="reviewTitle">生成完成，请确认变更</div>
         <span class="review-progress" id="reviewProgress"></span>
+        <div class="review-nav" id="reviewNav">
+          <button type="button" class="review-nav-btn" id="reviewPrevBtn" title="上一处待确认" aria-label="上一处待确认">↑</button>
+          <button type="button" class="review-nav-btn" id="reviewNextBtn" title="下一处待确认" aria-label="下一处待确认">↓</button>
+        </div>
         <div class="review-actions">
+          <button type="button" class="sketch-btn" id="ignoreNewReviewBtn">保留旧版</button>
           <button type="button" class="sketch-btn" id="acceptAllReviewBtn">全部采纳新版</button>
           <button type="button" class="sketch-btn primary" id="finishReviewBtn">完成确认</button>
         </div>
@@ -471,10 +515,13 @@
     const reviewBar = document.getElementById('reviewBar');
     const reviewTitle = document.getElementById('reviewTitle');
     const reviewProgress = document.getElementById('reviewProgress');
+    const reviewPrevBtn = document.getElementById('reviewPrevBtn');
+    const reviewNextBtn = document.getElementById('reviewNextBtn');
     const saveEditBtn = document.getElementById('saveEditBtn');
     const saveEditBarBtn = document.getElementById('saveEditBarBtn');
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const editActionBar = document.getElementById('editActionBar');
+    const rollbackVersionBtn = document.getElementById('rollbackVersionBtn');
 
     function statusLabel(status) {
       return { pending: '待生成', generating: '生成中', done: '已完成', error: '失败' }[status] || status;
@@ -545,6 +592,7 @@
           <div class="session-item-meta">
             <span class="session-status ${escapeHtml(s.status || 'pending')}">${statusLabel(s.status)}</span>
             <span class="session-item-count">${rounds} 轮对话${s.prd ? ' · ' + s.prd.length + ' 字' : ''}</span>
+            <button type="button" class="session-delete-btn" data-delete-id="${s.id}" title="删除此记录" aria-label="删除">删除</button>
           </div>
         </article>`;
       }).join('');
@@ -556,6 +604,33 @@
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSession(id); }
         });
       });
+      sessionListEl.querySelectorAll('.session-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteSession(btn.dataset.deleteId);
+        });
+      });
+    }
+
+    async function deleteSession(id) {
+      const s = sessions.find(x => x.id === id);
+      if (!s) return;
+      const title = s.title || '未命名';
+      if (!confirm('确定删除「' + title + '」？\n\n对话、PRD 与版本历史将被永久删除，无法恢复。')) return;
+      try {
+        await PrdForge.SessionStore.delete(id);
+      } catch (e) {
+        showToast('删除失败：' + e.message, 'error');
+        return;
+      }
+      sessions = sessions.filter(x => x.id !== id);
+      if (currentId === id) {
+        currentId = null;
+        showListView();
+      } else {
+        renderSessionListPage();
+      }
+      showToast('已删除', 'success');
     }
 
     async function persistCurrent() {
@@ -613,13 +688,16 @@
       versions.forEach(ver => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'version-chip' + (selectedVersion === ver.v ? ' active' : '');
         const isLatest = ver.v === versions.length;
-        const confirmed = ver.confirmed !== false;
+        const ignored = ver.ignored === true;
+        const confirmed = ver.confirmed !== false && !ignored;
+        const activeV = lastActiveVersion(versions);
+        btn.className = 'version-chip' + (selectedVersion === ver.v ? ' active' : '') + (ignored ? ' ignored' : '');
         btn.textContent = 'v' + ver.v
-          + (isLatest && !confirmed ? ' 待确认' : '')
-          + (isLatest && confirmed ? ' 最新' : '')
-          + (!isLatest && confirmed ? ' ✓' : '');
+          + (ignored ? ' 已忽略' : '')
+          + (isLatest && !confirmed && !ignored ? ' 待确认' : '')
+          + (!ignored && ver.v === activeV && confirmed ? ' 当前' : '')
+          + (!isLatest && confirmed && ver.v !== activeV ? ' ✓' : '');
         btn.title = formatTime(ver.createdAt) + (ver.label ? ' · ' + ver.label : '');
         btn.addEventListener('click', () => {
           if (pendingReview && !confirm('还在确认变更中，切换版本将退出确认，继续吗？')) return;
@@ -678,11 +756,75 @@
       prdPlaceholder.style.display = (text || s.prd) ? 'none' : 'block';
     }
 
+    function canRollbackTo(targetV) {
+      const s = getCurrent();
+      if (!s || generating || pendingReview || prdViewMode === 'edit') return false;
+      const versions = s.prdVersions || [];
+      if (versions.length < 2) return false;
+      const latestV = versions[versions.length - 1].v;
+      return targetV != null && targetV < latestV;
+    }
+
+    function updateRollbackButton() {
+      if (!rollbackVersionBtn) return;
+      const show = canRollbackTo(selectedVersion);
+      rollbackVersionBtn.style.display = show ? 'inline-block' : 'none';
+      if (show) {
+        const s = getCurrent();
+        const versions = s?.prdVersions || [];
+        const latestV = versions[versions.length - 1]?.v;
+        rollbackVersionBtn.textContent = '回退到 v' + selectedVersion;
+        rollbackVersionBtn.title = '回退到 v' + selectedVersion + '，v' + (selectedVersion + 1) + '–v' + latestV + ' 及之后对话将被删除';
+      }
+    }
+
+    async function rollbackToSelectedVersion() {
+      const s = getCurrent();
+      if (!s || !canRollbackTo(selectedVersion)) return;
+      const versions = s.prdVersions || [];
+      const latestV = versions[versions.length - 1].v;
+      const removed = versions.filter(v => v.v > selectedVersion);
+      const removedLabels = removed.map(v => 'v' + v.v).join('、');
+      const msg =
+        '回退到 v' + selectedVersion + '？\n\n' +
+        '将恢复该版本的 PRD 与对话记录。\n' +
+        removedLabels + ' 及之后的对话将被永久删除，无法恢复。';
+      if (!confirm(msg)) return;
+
+      const result = PrdForge.PrdVersions.rollbackToVersion(s, selectedVersion);
+      if (!result) {
+        showToast('回退失败', 'error');
+        return;
+      }
+
+      pendingReview = false;
+      prdViewMode = 'view';
+      delete diffView.dataset.reviewKey;
+      s.messages.push({
+        role: 'system',
+        content: '已回退到 v' + selectedVersion + '，' + removedLabels + ' 已删除',
+        time: Date.now()
+      });
+      s.status = 'done';
+      await persistCurrent();
+      renderMessages();
+      renderPrd();
+      renderSessionListPage();
+      showToast('已回退到 v' + selectedVersion, 'success');
+    }
+
+    function lastActiveVersion(versions) {
+      for (let i = versions.length - 1; i >= 0; i--) {
+        if (!versions[i].ignored) return versions[i].v;
+      }
+      return versions[0]?.v ?? null;
+    }
+
     function startReview(s) {
       const versions = s.prdVersions || [];
       if (versions.length < 2) return;
-      reviewBaseV = versions[versions.length - 2].v;
       reviewNewV = versions[versions.length - 1].v;
+      reviewBaseV = lastActiveVersion(versions.slice(0, -1)) ?? versions[versions.length - 2].v;
       pendingReview = true;
       prdViewMode = 'review';
       selectedVersion = reviewNewV;
@@ -694,6 +836,42 @@
       return currentHunks.filter(h => h.type !== 'equal');
     }
 
+    function unconfirmedHunks() {
+      return reviewableHunks().filter(h => {
+        const el = diffView.querySelector('[data-id="' + h.id + '"]');
+        return el && !el.classList.contains('confirmed');
+      });
+    }
+
+    function clearReviewFocus() {
+      diffView.querySelectorAll('.diff-hunk.review-focus').forEach(el => el.classList.remove('review-focus'));
+    }
+
+    function scrollToReviewHunk(hunk) {
+      const el = diffView.querySelector('[data-id="' + h.id + '"]');
+      if (!el) return;
+      clearReviewFocus();
+      el.classList.add('review-focus');
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function gotoReviewHunk(direction) {
+      const pending = unconfirmedHunks();
+      if (!pending.length) {
+        clearReviewFocus();
+        return;
+      }
+      const focused = diffView.querySelector('.diff-hunk.review-focus');
+      const focusedId = focused?.dataset.id;
+      let idx = focusedId ? pending.findIndex(h => h.id === focusedId) : -1;
+      if (direction > 0) {
+        idx = idx < 0 ? 0 : (idx + 1) % pending.length;
+      } else {
+        idx = idx < 0 ? pending.length - 1 : (idx - 1 + pending.length) % pending.length;
+      }
+      scrollToReviewHunk(pending[idx]);
+    }
+
     function updateReviewProgress() {
       const total = reviewableHunks().length;
       const done = reviewableHunks().filter(h => {
@@ -701,6 +879,9 @@
         return el && el.classList.contains('confirmed');
       }).length;
       reviewProgress.textContent = total ? done + ' / ' + total + ' 已确认' : '';
+      const pending = unconfirmedHunks();
+      if (reviewPrevBtn) reviewPrevBtn.disabled = !pending.length;
+      if (reviewNextBtn) reviewNextBtn.disabled = !pending.length;
     }
 
     function setHunkDecision(el, hunk, choice, customText) {
@@ -714,6 +895,9 @@
       const customWrap = el.querySelector('.diff-custom-wrap');
       if (customWrap) customWrap.style.display = 'none';
       updateReviewProgress();
+      const next = unconfirmedHunks();
+      if (next.length) scrollToReviewHunk(next[0]);
+      else clearReviewFocus();
     }
 
     function renderReviewView() {
@@ -752,6 +936,8 @@
         });
       });
       updateReviewProgress();
+      const pending = unconfirmedHunks();
+      if (pending.length) scrollToReviewHunk(pending[0]);
     }
 
     function renderHunkHtml(h) {
@@ -820,6 +1006,30 @@
       });
     }
 
+    async function ignoreNewVersion() {
+      const s = getCurrent();
+      if (!s || !pendingReview) return;
+      const base = PrdForge.PrdVersions.getVersion(s, reviewBaseV);
+      if (!base) return;
+      if (!confirm('忽略 v' + reviewNewV + ' 的新生成内容，保留 v' + reviewBaseV + ' 作为当前 PRD？')) return;
+      s.prd = base.content;
+      s.updatedAt = Date.now();
+      PrdForge.PrdVersions.ignoreVersion(s, reviewNewV, '第' + reviewNewV + '轮生成（已忽略）');
+      selectedVersion = reviewBaseV;
+      pendingReview = false;
+      prdViewMode = 'view';
+      delete diffView.dataset.reviewKey;
+      s.messages.push({
+        role: 'assistant',
+        content: '已忽略 v' + reviewNewV + '，当前保留 v' + reviewBaseV,
+        time: Date.now()
+      });
+      await persistCurrent();
+      renderMessages();
+      renderPrd();
+      showToast('已忽略 v' + reviewNewV + '，保留 v' + reviewBaseV, 'success');
+    }
+
     async function finishReview() {
       const s = getCurrent();
       if (!s || !currentHunks.length) return;
@@ -833,6 +1043,7 @@
       s.prd = merged;
       s.updatedAt = Date.now();
       const entry = PrdForge.PrdVersions.confirmVersion(s, reviewNewV, merged, '第' + reviewNewV + '轮生成（已确认）');
+      if (entry) entry.messageCount = s.messages.length;
       selectedVersion = reviewNewV;
       pendingReview = false;
       prdViewMode = 'view';
@@ -863,6 +1074,7 @@
         diffView.classList.remove('visible');
         reviewBar.classList.remove('visible');
         prdPlaceholder.style.display = s.prd ? 'none' : 'block';
+        if (rollbackVersionBtn) rollbackVersionBtn.style.display = 'none';
         return;
       }
       if (s.status === 'error') {
@@ -910,6 +1122,7 @@
         const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
         renderPrdBody(s, ver ? ver.content : s.prd);
       }
+      updateRollbackButton();
     }
 
     function switchSession(id) { openSession(id); }
@@ -1037,8 +1250,9 @@
         session, session.prd, '第' + round + '轮生成',
         { confirmed: round === 1 }
       );
+      session.messages.push({ role: 'assistant', content: 'PRD 已生成 v' + (entry ? entry.v : '') + '（' + session.prd.length + ' 字）', time: Date.now() });
+      if (entry) entry.messageCount = session.messages.length;
       selectedVersion = entry ? entry.v : session.prdVersions[session.prdVersions.length - 1].v;
-      session.messages.push({ role: 'assistant', content: 'PRD 已生成 v' + selectedVersion + '（' + session.prd.length + ' 字）', time: Date.now() });
       await persistCurrent();
       renderMessages();
       if (round >= 2) startReview(session);
@@ -1122,6 +1336,7 @@
       s.updatedAt = Date.now();
       const entry = PrdForge.PrdVersions.pushVersion(s, text, '手动编辑');
       if (!entry) { showToast('内容没有变化', 'error'); return; }
+      entry.messageCount = s.messages.length;
       selectedVersion = entry.v;
       editDirty = false;
       editBaseline = text;
@@ -1135,32 +1350,49 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
 
+    function getExportablePrdText(s) {
+      if (!s) return '';
+      if (prdViewMode === 'edit') return prdEditor.value;
+      if (prdViewMode === 'review' && pendingReview) {
+        return PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions);
+      }
+      const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
+      return (ver?.content ?? s.prd) || '';
+    }
+
     document.getElementById('copyBtn').addEventListener('click', () => {
       const s = getCurrent();
-      if (!s || !s.prd) return;
-      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'review'
-        ? PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions) : s.prd);
-      navigator.clipboard.writeText(text).then(() => showToast('已复制', 'success'));
+      const text = getExportablePrdText(s);
+      if (!text.trim()) return;
+      navigator.clipboard.writeText(text).then(() => {
+        const vLabel = selectedVersion ? 'v' + selectedVersion : '';
+        showToast(vLabel ? '已复制 ' + vLabel : '已复制', 'success');
+      });
     });
     document.getElementById('downloadBtn').addEventListener('click', () => {
       const s = getCurrent();
-      if (!s || !s.prd) return;
-      const text = prdViewMode === 'edit' ? prdEditor.value : (prdViewMode === 'review'
-        ? PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions) : s.prd);
+      const text = getExportablePrdText(s);
+      if (!text.trim()) return;
       const blob = new Blob([text], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'PRD_' + new Date().toISOString().slice(0, 10) + '.md';
+      const vPart = selectedVersion ? '_v' + selectedVersion : '';
+      a.download = 'PRD' + vPart + '_' + new Date().toISOString().slice(0, 10) + '.md';
       a.click();
       URL.revokeObjectURL(url);
+      if (selectedVersion) showToast('已下载 v' + selectedVersion, 'success');
     });
 
     document.querySelectorAll('.mode-tab').forEach(tab => {
       tab.addEventListener('click', () => setPrdViewMode(tab.dataset.mode));
     });
+    document.getElementById('ignoreNewReviewBtn').addEventListener('click', ignoreNewVersion);
+    rollbackVersionBtn?.addEventListener('click', rollbackToSelectedVersion);
     document.getElementById('acceptAllReviewBtn').addEventListener('click', acceptAllReview);
     document.getElementById('finishReviewBtn').addEventListener('click', finishReview);
+    reviewPrevBtn?.addEventListener('click', () => gotoReviewHunk(-1));
+    reviewNextBtn?.addEventListener('click', () => gotoReviewHunk(1));
     saveEditBtn.addEventListener('click', saveEdit);
     saveEditBarBtn.addEventListener('click', saveEdit);
     cancelEditBtn.addEventListener('click', () => {
