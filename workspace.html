@@ -818,11 +818,28 @@
 
     function renderMarkdown(text) {
       if (!text) return '';
+      const repaired = PrdForge.PrdVersions.repairBrokenSectionNumbers(text);
+      const safe = protectPrdSectionLines(repaired);
       if (typeof marked === 'undefined') {
-        return '<pre class="md-fallback">' + escapeHtml(text) + '</pre>';
+        return '<pre class="md-fallback">' + escapeHtml(safe) + '</pre>';
       }
-      const html = marked.parse(text);
+      const html = marked.parse(safe);
       return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+    }
+
+    /** 避免「4. UI 设计」被 Markdown 解析成有序列表 */
+    function protectPrdSectionLines(text) {
+      return text.split('\n').map(line => {
+        if (/^#{1,6}\s/.test(line)) return line;
+        if (/^[-*+]\s/.test(line)) return line;
+        if (/^\d+\.\d+\s/.test(line)) {
+          return line.replace(/^(\d+\.)(\d+)/, '$1\u200b$2');
+        }
+        if (/^\d+\.\s+\S/.test(line)) {
+          return line.replace(/^(\d+\.)(\s)/, '$1\u200b$2');
+        }
+        return line;
+      }).join('\n');
     }
 
     function updateStreamingPrd(text) {
@@ -842,8 +859,9 @@
 
     function renderPrdBody(s, text) {
       const content = text || '';
-      prdContent.textContent = content;
-      prdPreview.innerHTML = renderMarkdown(content);
+      const display = PrdForge.PrdVersions.repairBrokenSectionNumbers(content);
+      prdContent.textContent = display;
+      prdPreview.innerHTML = renderMarkdown(display);
       prdPlaceholder.style.display = (content || s.prd) ? 'none' : 'block';
       const isPreview = prdViewMode === 'preview';
       const isSource = prdViewMode === 'source';

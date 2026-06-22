@@ -1,12 +1,32 @@
 (function () {
   'use strict';
 
-  // 按句末、空行、Markdown 标题前拆段，避免合并时丢失换行
-  const UNIT_SPLIT = /(?<=[。！？.!?])\s*|\n+(?=#{1,6}\s)|\n{2,}/;
+  // 按段落（空行）拆段，避免在「4.1」「6.2」等章节序号处误切
+  const UNIT_SPLIT = /\n{2,}/;
+  const UNIT_GLUE = '\n\n';
 
   function splitUnits(text) {
     if (!text) return [];
     return text.split(UNIT_SPLIT).map(s => s.trim()).filter(Boolean);
+  }
+
+  /** 修复合并误拆的章节号，如「4.」+「1 Figma」或「### 4.」+「1 Figma」 */
+  function repairBrokenSectionNumbers(text) {
+    if (!text) return text;
+    const lines = text.split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const next = lines[i + 1];
+      const trimmed = line.trim();
+      if (/^(#{1,6}\s+)?\d+\.\s*$/.test(trimmed) && next != null && /^\d/.test(next.trim())) {
+        out.push(trimmed + next.trim());
+        i++;
+        continue;
+      }
+      out.push(line);
+    }
+    return out.join('\n');
   }
 
   function charsToText(encoded, lineArray) {
@@ -16,7 +36,7 @@
       if (idx >= lineArray.length - 1) continue;
       const line = lineArray[idx];
       if (!line) continue;
-      if (out) out += '\n';
+      if (out) out += UNIT_GLUE;
       out += line;
     }
     return out;
@@ -75,8 +95,8 @@
       const ins = [];
       while (i < diffs.length && diffs[i][0] === -1) { dels.push(diffs[i][1]); i++; }
       while (i < diffs.length && diffs[i][0] === 1) { ins.push(diffs[i][1]); i++; }
-      const oldText = dels.join('\n');
-      const newText = ins.join('\n');
+      const oldText = dels.join(UNIT_GLUE);
+      const newText = ins.join(UNIT_GLUE);
       if (oldText && newText) {
         hunks.push({ type: 'change', oldText, newText, id: 'h' + hunks.length });
       } else if (newText) {
@@ -99,7 +119,7 @@
   }
 
   function buildMergedText(hunks, decisions) {
-    return hunks.map(h => {
+    const parts = hunks.map(h => {
       const dec = decisions[h.id];
       if (!dec) {
         if (h.type === 'equal') return h.text;
@@ -112,7 +132,8 @@
       if (dec.choice === 'remove') return '';
       if (dec.choice === 'custom') return dec.text || '';
       return '';
-    }).filter(Boolean).join('\n');
+    }).filter(part => part != null && part !== '');
+    return repairBrokenSectionNumbers(parts.join(UNIT_GLUE));
   }
 
   function isActiveVersion(ver) {
@@ -263,6 +284,7 @@
   window.PrdForge = window.PrdForge || {};
   PrdForge.PrdVersions = {
     splitUnits,
+    repairBrokenSectionNumbers,
     computeDiff,
     defaultDecisions,
     buildMergedText,
