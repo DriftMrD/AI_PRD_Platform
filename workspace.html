@@ -855,7 +855,7 @@
         const versions = PrdForge.PrdVersions.activeVersions(s);
         const latestV = versions[versions.length - 1]?.v;
         rollbackVersionBtn.textContent = '回退到 v' + selectedVersion;
-        rollbackVersionBtn.title = '回退到 v' + selectedVersion + '，v' + (selectedVersion + 1) + '–v' + latestV + ' 及之后版本将不再显示';
+        rollbackVersionBtn.title = '回退到 v' + selectedVersion + '，v' + (selectedVersion + 1) + '–v' + latestV + ' 将被删除';
       }
     }
 
@@ -869,7 +869,7 @@
       const msg =
         '回退到 v' + selectedVersion + '？\n\n' +
         '将恢复该版本的 PRD 与对话记录。\n' +
-        removedLabels + ' 及之后的版本与对话将不再显示（数据仍保留在云端）。';
+        removedLabels + ' 及之后的版本与对话将被删除，无法恢复。';
       if (!confirm(msg)) return;
 
       const result = PrdForge.PrdVersions.rollbackToVersion(s, selectedVersion);
@@ -883,7 +883,7 @@
       delete diffView.dataset.reviewKey;
       s.messages.push({
         role: 'system',
-        content: '已回退到 v' + selectedVersion + '，' + removedLabels + ' 已隐藏',
+        content: '已回退到 v' + selectedVersion + '，' + removedLabels + ' 已删除',
         time: Date.now()
       });
       s.status = 'done';
