@@ -172,6 +172,7 @@
     }
     .mode-tab:hover { color: var(--ink-mid); border-color: var(--paper-border); }
     .mode-tab.active { color: var(--accent-orange); border-color: var(--accent-orange); background: rgba(212,116,42,0.06); }
+    .mode-tab:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
     .diff-controls {
       padding: 12px 20px; border-bottom: 1px dotted var(--paper-border-lt);
       display: none; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
@@ -780,6 +781,17 @@
       if (selectedVersion === null) selectedVersion = versions[versions.length - 1].v;
     }
 
+    function latestVersionV(s) {
+      return PrdForge.PrdVersions.latestVersion(s)?.v ?? null;
+    }
+
+    function isLatestSelectedVersion(s) {
+      const latestV = latestVersionV(s);
+      if (latestV == null) return false;
+      const currentV = selectedVersion ?? latestV;
+      return currentV === latestV;
+    }
+
     function setPrdViewMode(mode) {
       if (pendingReview && mode !== 'review') {
         if (!confirm('还在确认变更中，确定离开吗？')) return;
@@ -787,6 +799,13 @@
       }
       if (prdViewMode === 'edit' && mode !== 'edit' && editDirty) {
         if (!confirm('有未保存的编辑，确定离开吗？')) return;
+      }
+      if (mode === 'edit') {
+        const s = getCurrent();
+        if (s && !isLatestSelectedVersion(s)) {
+          showToast('仅最新版本可编辑', 'error');
+          return;
+        }
       }
       if (mode !== 'edit') editDirty = false;
       prdViewMode = mode;
@@ -1133,6 +1152,16 @@
       const versions = PrdForge.PrdVersions.activeVersions(s);
       const hasContent = s.prd && s.prd.length > 0;
       prdToolbar.style.display = hasContent && s.status !== 'generating' ? 'flex' : 'none';
+      const canEditVersion = isLatestSelectedVersion(s);
+      const editTab = document.querySelector('.mode-tab[data-mode="edit"]');
+      if (editTab) {
+        editTab.disabled = !canEditVersion;
+        editTab.title = canEditVersion ? '' : '仅最新版本可编辑';
+      }
+      if (prdViewMode === 'edit' && !canEditVersion) {
+        prdViewMode = 'preview';
+        editDirty = false;
+      }
       document.querySelectorAll('.mode-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.mode === prdViewMode);
       });
@@ -1414,6 +1443,11 @@
     async function saveEdit() {
       const s = getCurrent();
       if (!s) return;
+      if (!isLatestSelectedVersion(s)) {
+        showToast('仅最新版本可编辑', 'error');
+        setPrdViewMode('preview');
+        return;
+      }
       const text = prdEditor.value.trim();
       if (!text) { showToast('内容不能为空', 'error'); return; }
       s.prd = text;
