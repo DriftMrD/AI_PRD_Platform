@@ -31,6 +31,8 @@ class Settings(BaseSettings):
         default="https://api.openai.com/v1", alias="LLM_BASE_URL"
     )
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
+    llm_temperature: float = Field(default=0.3, alias="LLM_TEMPERATURE")
+    llm_max_tokens: int = Field(default=8000, alias="LLM_MAX_TOKENS")
     llm_timeout_s: float = Field(default=120.0, alias="LLM_TIMEOUT_S")
     llm_first_token_timeout_s: float = Field(
         default=30.0, alias="LLM_FIRST_TOKEN_TIMEOUT_S"
@@ -42,6 +44,28 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: str = Field(default="http://localhost:5173", alias="CORS_ORIGINS")
+
+    # Langfuse Prompt Management（可选；配齐 public + secret key 后启用）
+    langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_base_url: str = Field(
+        default="https://cloud.langfuse.com", alias="LANGFUSE_BASE_URL"
+    )
+    langfuse_skill_prompt_name: str = Field(
+        default="prd-skill", alias="LANGFUSE_SKILL_PROMPT_NAME"
+    )
+    langfuse_template_prompt_name: str = Field(
+        default="prd-template", alias="LANGFUSE_TEMPLATE_PROMPT_NAME"
+    )
+    langfuse_system_prompt_name: str = Field(
+        default="prd-system", alias="LANGFUSE_SYSTEM_PROMPT_NAME"
+    )
+    langfuse_prompt_label: str = Field(
+        default="production", alias="LANGFUSE_PROMPT_LABEL"
+    )
+    langfuse_cache_ttl_seconds: int = Field(
+        default=60, alias="LANGFUSE_CACHE_TTL_SECONDS"
+    )
 
     @field_validator("llm_api_key")
     @classmethod
@@ -65,6 +89,16 @@ class Settings(BaseSettings):
     def max_file_size_bytes(self) -> int:
         """`MAX_FILE_SIZE_MB` 转字节。"""
         return self.max_file_size_mb * 1024 * 1024
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        """是否从 Langfuse 拉取 prompt（需同时配置 public + secret key）。"""
+        return bool(
+            self.langfuse_public_key
+            and self.langfuse_public_key.strip()
+            and self.langfuse_secret_key
+            and self.langfuse_secret_key.strip()
+        )
 
 
 @lru_cache(maxsize=1)

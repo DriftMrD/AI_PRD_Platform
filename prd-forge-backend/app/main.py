@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.errors import AppError, INTERNAL
 from app.prompts.skill_loader import preload as preload_skill_and_template
+from app.prompts.skill_loader import prompt_source
 from app.routers.generate import router as generate_router
 
 logging.basicConfig(
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("startup: settings loaded (provider=%s, model=%s)",
                 settings.llm_provider, settings.llm_model)
     preload_skill_and_template()
-    logger.info("startup: SKILL.md & prd-template.md loaded")
+    logger.info("startup: prompts loaded from %s", prompt_source())
     try:
         yield
     finally:

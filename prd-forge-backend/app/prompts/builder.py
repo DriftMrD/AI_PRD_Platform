@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from app.prompts.skill_loader import get_skill_text, get_template_text
+from app.prompts.skill_loader import (
+    get_skill_text,
+    get_system_preamble_text,
+    get_template_text,
+)
 
 
 def _format_meta_block(
@@ -59,6 +63,7 @@ def build(
     """
     skill = get_skill_text()
     template_body = get_template_text()
+    preamble = get_system_preamble_text()
 
     meta = _format_meta_block(
         template=template,
@@ -69,8 +74,7 @@ def build(
     )
 
     system = (
-        "你是 PRD Forge，一个把用户原始需求转写为结构化产品需求文档（PRD）的助手。\n"
-        "请严格遵循下方的「转换规则（SKILL）」与「输出模板」生成内容。\n\n"
+        f"{preamble.strip()}\n\n"
         "## 转换规则（SKILL）\n"
         f"{skill}\n\n"
         "## 输出模板\n"

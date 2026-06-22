@@ -43,6 +43,7 @@ from app.models.sse import (
 )
 from app.parsers.factory import get_parser, supported_extensions
 from app.prompts import builder as prompt_builder
+from app.prompts.skill_loader import get_generation_config
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,13 @@ async def generate(
 
             # 4) LLM 流式
             adapter = get_adapter()
-            log.info("start LLM stream (model=%s)", settings.llm_model)
+            gen_cfg = get_generation_config()
+            log.info(
+                "start LLM stream (model=%s, temperature=%s, max_tokens=%s)",
+                gen_cfg.model,
+                gen_cfg.temperature,
+                gen_cfg.max_tokens,
+            )
 
             # 把 stream 放到一个独立 task 中，主协程持续检测断开并 cancel
             queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=64)

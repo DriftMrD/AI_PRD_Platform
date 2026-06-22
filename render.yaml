@@ -30,6 +30,10 @@ services:
         value: https://api.deepseek.com/v1
       - key: LLM_MODEL
         value: deepseek-chat
+      - key: LLM_TEMPERATURE
+        value: "0.3"
+      - key: LLM_MAX_TOKENS
+        value: "8000"
       - key: LLM_TIMEOUT_S
         value: "180"
       - key: LLM_FIRST_TOKEN_TIMEOUT_S
@@ -40,7 +44,13 @@ services:
         value: "50000"
       - key: CORS_ORIGINS
         value: "https://driftmrd.github.io,http://localhost:5173,http://localhost:8000"
+      - key: LANGFUSE_BASE_URL
+        value: https://cloud.langfuse.com
 
       # === 敏感配置：sync: false 表示从 Dashboard 读取，绝不写在这里 ===
       - key: LLM_API_KEY
+        sync: false
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
         sync: false

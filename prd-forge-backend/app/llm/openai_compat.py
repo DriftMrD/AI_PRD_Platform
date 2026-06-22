@@ -12,6 +12,7 @@ import httpx
 from app.config import Settings
 from app.errors import AppError, LLM_AUTH, LLM_TIMEOUT, LLM_UPSTREAM
 from app.llm.base import BaseLLMAdapter
+from app.prompts.skill_loader import get_generation_config
 
 
 class OpenAICompatAdapter(BaseLLMAdapter):
@@ -41,7 +42,6 @@ class OpenAICompatAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
         }
-        self._model = self._settings.llm_model
 
     async def stream(self, system: str, user: str) -> AsyncIterator[str]:
         """流式调用 LLM，按 chunk yield 增量文本。
@@ -49,14 +49,19 @@ class OpenAICompatAdapter(BaseLLMAdapter):
         Raises:
             AppError(LLM_AUTH / LLM_TIMEOUT / LLM_UPSTREAM)
         """
+        generation = get_generation_config()
         payload: dict[str, Any] = {
-            "model": self._model,
+            "model": generation.model,
             "stream": True,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
         }
+        if generation.temperature is not None:
+            payload["temperature"] = generation.temperature
+        if generation.max_tokens is not None:
+            payload["max_tokens"] = generation.max_tokens
 
         try:
             async with self._client.stream(
