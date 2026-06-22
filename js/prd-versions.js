@@ -115,16 +115,53 @@
     }).filter(Boolean).join('\n');
   }
 
+  function isActiveVersion(ver) {
+    return ver && ver.deleted !== 1;
+  }
+
+  function isActiveMessage(msg) {
+    return msg && msg.deleted !== 1;
+  }
+
+  function activeVersions(session) {
+    return (session.prdVersions || []).filter(isActiveVersion);
+  }
+
+  function activeMessages(session) {
+    return (session.messages || []).filter(isActiveMessage);
+  }
+
+  function maxVersionNumber(session) {
+    const versions = session.prdVersions || [];
+    if (!versions.length) return 0;
+    return Math.max(...versions.map(x => x.v));
+  }
+
+  function latestVersion(session) {
+    const list = activeVersions(session);
+    return list.length ? list[list.length - 1] : null;
+  }
+
+  function lastEffectiveVersion(versions) {
+    const list = (versions || []).filter(isActiveVersion);
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (!list[i].ignored) return list[i].v;
+    }
+    return list[0]?.v ?? null;
+  }
+
   function pushVersion(session, content, label, opts) {
     if (!content || !content.trim()) return null;
     if (!session.prdVersions) session.prdVersions = [];
-    const last = session.prdVersions[session.prdVersions.length - 1];
+    const active = activeVersions(session);
+    const last = active[active.length - 1];
     if (last && last.content === content && (!opts || opts.allowDuplicate !== true)) return last;
-    const v = session.prdVersions.length + 1;
+    const v = maxVersionNumber(session) + 1;
     const entry = {
       v, content, createdAt: Date.now(),
       label: label || ('v' + v),
-      confirmed: opts && opts.confirmed === false ? false : true
+      confirmed: opts && opts.confirmed === false ? false : true,
+      deleted: 0
     };
     if (opts && typeof opts.messageCount === 'number') {
       entry.messageCount = opts.messageCount;
@@ -142,7 +179,9 @@
     entry.confirmed = true;
     entry.confirmedAt = Date.now();
     entry.ignored = false;
+    entry.deleted = 0;
     delete entry.ignoredAt;
+    delete entry.deletedAt;
     if (label) entry.label = label;
     return entry;
   }
@@ -159,46 +198,63 @@
   }
 
   function getVersion(session, v) {
-    return (session.prdVersions || []).find(x => x.v === v);
+    return (session.prdVersions || []).find(x => x.v === v && isActiveVersion(x));
   }
 
-  function truncateMessagesForVersion(messages, targetV, versionEntry) {
+  function resolveMessageCutoff(messages, targetV, versionEntry) {
+    if (typeof versionEntry?.messageCount === 'number') {
+      return versionEntry.messageCount;
+    }
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.role !== 'assistant') continue;
-      if (m.content.includes('v' + targetV)) return messages.slice(0, i + 1);
+      if (m.content.includes('v' + targetV)) return i + 1;
     }
-    if (versionEntry?.label?.includes('手动编辑')) return messages.slice();
+    if (versionEntry?.label?.includes('手动编辑')) return messages.length;
     if (targetV === 1) {
       const firstUser = messages.findIndex(m => m.role === 'user');
-      if (firstUser < 0) return messages.slice();
+      if (firstUser < 0) return messages.length;
       let end = firstUser;
       if (messages[end + 1]?.role === 'assistant') end++;
-      return messages.slice(0, end + 1);
+      return end + 1;
     }
-    return messages.slice();
+    return messages.length;
   }
 
-  /** 回退到指定版本：截断 PRD 版本链与对话，删除其后所有版本。 */
+  function softDeleteMessagesFrom(messages, cutoff) {
+    messages.forEach((m, i) => {
+      if (i >= cutoff) m.deleted = 1;
+    });
+  }
+
+  /** 回退到指定版本：标记其后版本与对话为 deleted=1，不物理删除。 */
   function rollbackToVersion(session, targetV) {
     const versions = session.prdVersions || [];
-    const idx = versions.findIndex(x => x.v === targetV);
-    if (idx < 0 || idx >= versions.length - 1) return null;
+    const target = versions.find(x => x.v === targetV);
+    if (!target || !isActiveVersion(target)) return null;
 
-    const target = versions[idx];
-    const removedVersions = versions.slice(idx + 1);
-    session.prdVersions = versions.slice(0, idx + 1);
+    const latest = latestVersion(session);
+    if (!latest || targetV >= latest.v) return null;
+
+    const removedVersions = [];
+    versions.forEach(ver => {
+      if (ver.v > targetV && isActiveVersion(ver)) {
+        ver.deleted = 1;
+        ver.deletedAt = Date.now();
+        removedVersions.push(ver);
+      }
+    });
+
     target.ignored = false;
     target.confirmed = true;
+    target.deleted = 0;
     delete target.ignoredAt;
+    delete target.deletedAt;
 
     session.prd = target.content;
     const messages = session.messages || [];
-    if (typeof target.messageCount === 'number') {
-      session.messages = messages.slice(0, target.messageCount);
-    } else {
-      session.messages = truncateMessagesForVersion(messages, targetV, target);
-    }
+    const cutoff = resolveMessageCutoff(messages, targetV, target);
+    softDeleteMessagesFrom(messages, cutoff);
 
     session.updatedAt = Date.now();
     return { target, removedVersions };
@@ -210,6 +266,12 @@
     computeDiff,
     defaultDecisions,
     buildMergedText,
+    isActiveVersion,
+    isActiveMessage,
+    activeVersions,
+    activeMessages,
+    latestVersion,
+    lastEffectiveVersion,
     pushVersion,
     confirmVersion,
     ignoreVersion,

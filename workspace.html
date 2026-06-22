@@ -473,7 +473,7 @@
         </div>
         <div class="view-mode-tabs">
           <button type="button" class="mode-tab active" data-mode="preview">预览</button>
-          <button type="button" class="mode-tab" data-mode="source">源码</button>
+          <button type="button" class="mode-tab" data-mode="source" title="Markdown 原文">MD</button>
           <button type="button" class="mode-tab" data-mode="edit">编辑</button>
         </div>
       </div>
@@ -512,7 +512,7 @@
   <script src="https://cdn.jsdelivr.net/npm/diff-match-patch@1.0.5/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-  <script src="js/prd-versions.js?v=2"></script>
+  <script src="js/prd-versions.js?v=3"></script>
   <script src="js/supabase-client.js?v=2"></script>
   <script>
     const PENDING_KEY = 'prd_forge_pending';
@@ -543,7 +543,6 @@
     let reviewNewV = null;
     let editDirty = false;
     let editBaseline = '';
-    let previewRenderTimer = null;
 
     if (typeof marked !== 'undefined') {
       marked.setOptions({ breaks: true, gfm: true });
@@ -728,9 +727,10 @@
     function renderMessages() {
       const s = getCurrent();
       if (!s || viewMode !== 'detail') return;
-      messageEmpty.style.display = s.messages.length ? 'none' : 'block';
+      const visible = PrdForge.PrdVersions.activeMessages(s);
+      messageEmpty.style.display = visible.length ? 'none' : 'block';
       messageList.querySelectorAll('.msg-bubble').forEach(el => el.remove());
-      s.messages.forEach(m => {
+      visible.forEach(m => {
         const div = document.createElement('div');
         div.className = 'msg-bubble ' + m.role;
         div.innerHTML = escapeHtml(m.content) + (m.role !== 'system' ? `<div class="msg-time">${formatTime(m.time)}</div>` : '');
@@ -741,16 +741,17 @@
     }
 
     function renderVersionStrip(s) {
-      const versions = s.prdVersions || [];
+      const versions = PrdForge.PrdVersions.activeVersions(s);
       versionStrip.innerHTML = '<span class="version-strip-label">版本</span>';
       if (!versions.length) return;
+      const latestV = versions[versions.length - 1].v;
       versions.forEach(ver => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        const isLatest = ver.v === versions.length;
+        const isLatest = ver.v === latestV;
         const ignored = ver.ignored === true;
         const confirmed = ver.confirmed !== false && !ignored;
-        const activeV = lastActiveVersion(versions);
+        const activeV = PrdForge.PrdVersions.lastEffectiveVersion(versions);
         btn.className = 'version-chip' + (selectedVersion === ver.v ? ' active' : '') + (ignored ? ' ignored' : '');
         btn.textContent = 'v' + ver.v
           + (ignored ? ' 已忽略' : '')
@@ -810,13 +811,8 @@
     function updateStreamingPrd(text) {
       prdContent.textContent = text;
       prdPlaceholder.style.display = 'none';
-      prdPreview.style.display = 'block';
-      prdContent.style.display = 'none';
-      if (previewRenderTimer) clearTimeout(previewRenderTimer);
-      previewRenderTimer = setTimeout(() => {
-        prdPreview.innerHTML = renderMarkdown(text);
-        previewRenderTimer = null;
-      }, 150);
+      prdPreview.style.display = 'none';
+      prdContent.style.display = text ? 'block' : 'none';
     }
 
     function loadEditorContent(s) {
@@ -844,7 +840,7 @@
     function canRollbackTo(targetV) {
       const s = getCurrent();
       if (!s || generating || pendingReview || prdViewMode === 'edit') return false;
-      const versions = s.prdVersions || [];
+      const versions = PrdForge.PrdVersions.activeVersions(s);
       if (versions.length < 2) return false;
       const latestV = versions[versions.length - 1].v;
       return targetV != null && targetV < latestV;
@@ -856,24 +852,24 @@
       rollbackVersionBtn.style.display = show ? 'inline-block' : 'none';
       if (show) {
         const s = getCurrent();
-        const versions = s?.prdVersions || [];
+        const versions = PrdForge.PrdVersions.activeVersions(s);
         const latestV = versions[versions.length - 1]?.v;
         rollbackVersionBtn.textContent = '回退到 v' + selectedVersion;
-        rollbackVersionBtn.title = '回退到 v' + selectedVersion + '，v' + (selectedVersion + 1) + '–v' + latestV + ' 及之后对话将被删除';
+        rollbackVersionBtn.title = '回退到 v' + selectedVersion + '，v' + (selectedVersion + 1) + '–v' + latestV + ' 及之后版本将不再显示';
       }
     }
 
     async function rollbackToSelectedVersion() {
       const s = getCurrent();
       if (!s || !canRollbackTo(selectedVersion)) return;
-      const versions = s.prdVersions || [];
+      const versions = PrdForge.PrdVersions.activeVersions(s);
       const latestV = versions[versions.length - 1].v;
       const removed = versions.filter(v => v.v > selectedVersion);
       const removedLabels = removed.map(v => 'v' + v.v).join('、');
       const msg =
         '回退到 v' + selectedVersion + '？\n\n' +
         '将恢复该版本的 PRD 与对话记录。\n' +
-        removedLabels + ' 及之后的对话将被永久删除，无法恢复。';
+        removedLabels + ' 及之后的版本与对话将不再显示（数据仍保留在云端）。';
       if (!confirm(msg)) return;
 
       const result = PrdForge.PrdVersions.rollbackToVersion(s, selectedVersion);
@@ -887,7 +883,7 @@
       delete diffView.dataset.reviewKey;
       s.messages.push({
         role: 'system',
-        content: '已回退到 v' + selectedVersion + '，' + removedLabels + ' 已删除',
+        content: '已回退到 v' + selectedVersion + '，' + removedLabels + ' 已隐藏',
         time: Date.now()
       });
       s.status = 'done';
@@ -898,18 +894,11 @@
       showToast('已回退到 v' + selectedVersion, 'success');
     }
 
-    function lastActiveVersion(versions) {
-      for (let i = versions.length - 1; i >= 0; i--) {
-        if (!versions[i].ignored) return versions[i].v;
-      }
-      return versions[0]?.v ?? null;
-    }
-
     function startReview(s) {
-      const versions = s.prdVersions || [];
+      const versions = PrdForge.PrdVersions.activeVersions(s);
       if (versions.length < 2) return;
       reviewNewV = versions[versions.length - 1].v;
-      reviewBaseV = lastActiveVersion(versions.slice(0, -1)) ?? versions[versions.length - 2].v;
+      reviewBaseV = PrdForge.PrdVersions.lastEffectiveVersion(versions.slice(0, -1)) ?? versions[versions.length - 2].v;
       pendingReview = true;
       prdViewMode = 'review';
       selectedVersion = reviewNewV;
@@ -1141,7 +1130,7 @@
     function renderPrd() {
       const s = getCurrent();
       if (!s) return;
-      const versions = s.prdVersions || [];
+      const versions = PrdForge.PrdVersions.activeVersions(s);
       const hasContent = s.prd && s.prd.length > 0;
       prdToolbar.style.display = hasContent && s.status !== 'generating' ? 'flex' : 'none';
       document.querySelectorAll('.mode-tab').forEach(tab => {
@@ -1155,9 +1144,9 @@
         prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…';
         const streaming = s.prd || '';
         prdContent.textContent = streaming;
-        prdPreview.innerHTML = renderMarkdown(streaming);
-        prdPreview.style.display = streaming ? 'block' : 'none';
-        prdContent.style.display = 'none';
+        prdPreview.innerHTML = '';
+        prdPreview.style.display = 'none';
+        prdContent.style.display = streaming ? 'block' : 'none';
         prdEditor.style.display = 'none';
         diffView.classList.remove('visible');
         reviewBar.classList.remove('visible');
@@ -1252,7 +1241,7 @@
 
       const cfg = session.config;
       const fd = new FormData();
-      fd.append('text', userText || session.messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n'));
+      fd.append('text', userText || PrdForge.PrdVersions.activeMessages(session).filter(m => m.role === 'user').map(m => m.content).join('\n\n'));
       fd.append('template', cfg.template);
       fd.append('language', cfg.language);
       fd.append('detail', cfg.detail);
@@ -1294,7 +1283,7 @@
             updateStreamingPrd(session.prd);
             gotAnyChunk = true;
             prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…（' + session.prd.length + ' 字）';
-            prdPreview.closest('.prd-body').scrollTop = prdPreview.closest('.prd-body').scrollHeight;
+            prdContent.closest('.prd-body').scrollTop = prdContent.closest('.prd-body').scrollHeight;
           } else if (eventName === 'progress' && payload.message) {
             updateTypingBubble(payload.message);
             prdTitle.innerHTML = '<span class="dot warm"></span> ' + escapeHtml(payload.message);
@@ -1336,18 +1325,22 @@
       session.status = 'done';
       session.updatedAt = Date.now();
       removeTypingBubble();
-      const round = (session.messages || []).filter(m => m.role === 'user').length;
+      const round = PrdForge.PrdVersions.activeMessages(session).filter(m => m.role === 'user').length;
       const entry = PrdForge.PrdVersions.pushVersion(
         session, session.prd, '第' + round + '轮生成',
         { confirmed: round === 1 }
       );
       session.messages.push({ role: 'assistant', content: 'PRD 已生成 v' + (entry ? entry.v : '') + '（' + session.prd.length + ' 字）', time: Date.now() });
       if (entry) entry.messageCount = session.messages.length;
-      selectedVersion = entry ? entry.v : session.prdVersions[session.prdVersions.length - 1].v;
+      selectedVersion = entry ? entry.v : (PrdForge.PrdVersions.latestVersion(session)?.v ?? null);
       await persistCurrent();
       renderMessages();
-      if (round >= 2) startReview(session);
-      else renderPrd();
+      if (round >= 2) {
+        startReview(session);
+      } else {
+        prdViewMode = 'preview';
+        renderPrd();
+      }
       renderSessionListPage();
       showToast('PRD 生成成功！', 'success');
       resetSendBtn();
@@ -1410,7 +1403,7 @@
       await persistCurrent();
       renderMessages();
 
-      const context = s.messages.filter(m => m.role === 'user').map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
+      const context = PrdForge.PrdVersions.activeMessages(s).filter(m => m.role === 'user').map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
       const prompt = context + (s.prd ? '\n\n【当前 PRD 草稿，请在此基础上修改】\n' + s.prd.slice(0, 8000) : '');
       const prevPrd = s.prd;
       if (prevPrd) s._prdBackup = prevPrd;
