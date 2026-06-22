@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     )
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.3, alias="LLM_TEMPERATURE")
-    llm_max_tokens: int = Field(default=8000, alias="LLM_MAX_TOKENS")
+    llm_max_tokens: int = Field(default=20000, alias="LLM_MAX_TOKENS")
     llm_timeout_s: float = Field(default=120.0, alias="LLM_TIMEOUT_S")
     llm_first_token_timeout_s: float = Field(
         default=30.0, alias="LLM_FIRST_TOKEN_TIMEOUT_S"

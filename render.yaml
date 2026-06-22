@@ -33,7 +33,7 @@ services:
       - key: LLM_TEMPERATURE
         value: "0.3"
       - key: LLM_MAX_TOKENS
-        value: "8000"
+        value: "20000"
       - key: LLM_TIMEOUT_S
         value: "180"
       - key: LLM_FIRST_TOKEN_TIMEOUT_S
