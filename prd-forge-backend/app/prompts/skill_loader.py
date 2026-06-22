@@ -2,27 +2,38 @@
 
 来源（二选一）：
 - Langfuse：配置 `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` 后，从云端拉取 prompt。
-- 本地文件：仓库根的 `SKILL.md` 与 `prd-template.md`（启动期读入内存）。
+- 本地文件：仓库根的 skill-*.md 与 prd-template.md（启动期读入内存）。
 
-Langfuse 模式下每次请求经 SDK 拉取（默认 60s 本地缓存），改 prompt 后无需重启后端。
+Skill 按输入类型自动选用（document / dialogue），由 `builder` 决定，前端无感。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from app.config import Settings, get_settings
 from app.models.generation_config import GenerationConfig
 
+SkillMode = Literal["document", "dialogue"]
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_SKILL_PATH = _REPO_ROOT / "SKILL.md"
+_SKILL_DOCUMENT_PATH = _REPO_ROOT / "skill-document.md"
+_SKILL_DIALOGUE_PATH = _REPO_ROOT / "skill-dialogue.md"
 _TEMPLATE_PATH = _REPO_ROOT / "prd-template.md"
 _SYSTEM_PREAMBLE_PATH = _REPO_ROOT / "prd-system-preamble.md"
 
-_skill_text: str | None = None
+_skill_document_text: str | None = None
+_skill_dialogue_text: str | None = None
 _template_text: str | None = None
 _system_preamble_text: str | None = None
 _langfuse_client: object | None = None
+
+
+def _skill_prompt_name(settings: Settings, mode: SkillMode) -> str:
+    if mode == "document":
+        return settings.langfuse_skill_document_prompt_name
+    return settings.langfuse_skill_dialogue_prompt_name
 
 
 def _get_langfuse_client(settings: Settings):
@@ -103,22 +114,19 @@ def get_generation_config() -> GenerationConfig:
 
 def _load_local_files() -> None:
     """从仓库根读取本地 Markdown 文件。"""
-    global _skill_text, _template_text
-    if not _SKILL_PATH.is_file():
-        raise RuntimeError(
-            f"启动失败：仓库根缺少 SKILL.md（期望路径 {_SKILL_PATH}）"
-        )
-    if not _TEMPLATE_PATH.is_file():
-        raise RuntimeError(
-            f"启动失败：仓库根缺少 prd-template.md（期望路径 {_TEMPLATE_PATH}）"
-        )
+    global _skill_document_text, _skill_dialogue_text, _template_text, _system_preamble_text
+    for path in (
+        _SKILL_DOCUMENT_PATH,
+        _SKILL_DIALOGUE_PATH,
+        _TEMPLATE_PATH,
+        _SYSTEM_PREAMBLE_PATH,
+    ):
+        if not path.is_file():
+            raise RuntimeError(f"启动失败：仓库根缺少 {path.name}（期望路径 {path}）")
     try:
-        _skill_text = _SKILL_PATH.read_text(encoding="utf-8")
+        _skill_document_text = _SKILL_DOCUMENT_PATH.read_text(encoding="utf-8")
+        _skill_dialogue_text = _SKILL_DIALOGUE_PATH.read_text(encoding="utf-8")
         _template_text = _TEMPLATE_PATH.read_text(encoding="utf-8")
-        if not _SYSTEM_PREAMBLE_PATH.is_file():
-            raise RuntimeError(
-                f"启动失败：仓库根缺少 prd-system-preamble.md（期望路径 {_SYSTEM_PREAMBLE_PATH}）"
-            )
         _system_preamble_text = _SYSTEM_PREAMBLE_PATH.read_text(encoding="utf-8")
     except OSError as exc:
         raise RuntimeError(f"启动失败：读取 SKILL/模板异常：{exc}") from exc
@@ -128,7 +136,8 @@ def preload() -> None:
     """启动期调用：校验 prompt 来源可用（fail-fast）。"""
     settings = get_settings()
     if settings.langfuse_enabled:
-        get_skill_text()
+        get_skill_text("document")
+        get_skill_text("dialogue")
         get_template_text()
         get_system_preamble_text()
         get_generation_config()
@@ -136,15 +145,20 @@ def preload() -> None:
     _load_local_files()
 
 
-def get_skill_text() -> str:
-    """返回 SKILL 正文。"""
+def get_skill_text(mode: SkillMode) -> str:
+    """返回指定类型的 SKILL 正文。"""
     settings = get_settings()
     if settings.langfuse_enabled:
-        return _fetch_langfuse_prompt(settings, settings.langfuse_skill_prompt_name)
+        return _fetch_langfuse_prompt(settings, _skill_prompt_name(settings, mode))
 
-    if _skill_text is None:
-        raise RuntimeError("SKILL.md 尚未加载（请确认 lifespan 中已调用 preload()）")
-    return _skill_text
+    if mode == "document":
+        if _skill_document_text is None:
+            raise RuntimeError("skill-document.md 尚未加载")
+        return _skill_document_text
+
+    if _skill_dialogue_text is None:
+        raise RuntimeError("skill-dialogue.md 尚未加载")
+    return _skill_dialogue_text
 
 
 def get_template_text() -> str:
@@ -163,7 +177,7 @@ def get_template_text() -> str:
 
 
 def get_system_preamble_text() -> str:
-    """返回 system prompt 前言（角色 + 输出格式约束）。"""
+    """返回 system prompt 输出格式约束。"""
     settings = get_settings()
     if settings.langfuse_enabled:
         return _fetch_langfuse_prompt(
@@ -183,21 +197,24 @@ def prompt_source() -> str:
     if settings.langfuse_enabled:
         return (
             f"langfuse ({settings.langfuse_base_url}, "
-            f"skill={settings.langfuse_skill_prompt_name}, "
+            f"skills={settings.langfuse_skill_document_prompt_name}|"
+            f"{settings.langfuse_skill_dialogue_prompt_name}, "
             f"template={settings.langfuse_template_prompt_name}, "
             f"system={settings.langfuse_system_prompt_name}, "
             f"label={settings.langfuse_prompt_label})"
         )
     return (
-        f"local ({_SKILL_PATH.name}, {_TEMPLATE_PATH.name}, "
-        f"{_SYSTEM_PREAMBLE_PATH.name})"
+        f"local ({_SKILL_DOCUMENT_PATH.name}, {_SKILL_DIALOGUE_PATH.name}, "
+        f"{_TEMPLATE_PATH.name}, {_SYSTEM_PREAMBLE_PATH.name})"
     )
 
 
 def reset_for_tests() -> None:
     """QA 阶段使用：清空模块级状态。"""
-    global _skill_text, _template_text, _system_preamble_text, _langfuse_client
-    _skill_text = None
+    global _skill_document_text, _skill_dialogue_text, _template_text
+    global _system_preamble_text, _langfuse_client
+    _skill_document_text = None
+    _skill_dialogue_text = None
     _template_text = None
     _system_preamble_text = None
     _langfuse_client = None

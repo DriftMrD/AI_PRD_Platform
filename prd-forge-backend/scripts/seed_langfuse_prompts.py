@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""把仓库根的 SKILL / 模板 / system preamble 上传到 Langfuse（一次性初始化）。
+"""把仓库根的 skill / 模板 / system preamble 上传到 Langfuse。
 
 用法（在 prd-forge-backend 目录）：
-    cp .env.example .env   # 填好 LANGFUSE_* key
     python scripts/seed_langfuse_prompts.py
-
-会在 Langfuse 创建/更新 text prompt，并打上 production 标签。
-`prd-system` 会附带 model / temperature / max_tokens config（来自 .env 兜底值）。
 """
 
 from __future__ import annotations
@@ -14,7 +10,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# 允许从 prd-forge-backend/ 直接运行
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from langfuse import Langfuse
@@ -22,7 +17,8 @@ from langfuse import Langfuse
 from app.config import get_settings
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SKILL_PATH = _REPO_ROOT / "SKILL.md"
+_SKILL_DOCUMENT_PATH = _REPO_ROOT / "skill-document.md"
+_SKILL_DIALOGUE_PATH = _REPO_ROOT / "skill-dialogue.md"
 _TEMPLATE_PATH = _REPO_ROOT / "prd-template.md"
 _SYSTEM_PREAMBLE_PATH = _REPO_ROOT / "prd-system-preamble.md"
 
@@ -53,7 +49,8 @@ def main() -> None:
     }
 
     seeds: list[tuple[str, str, dict | None]] = [
-        (settings.langfuse_skill_prompt_name, _read(_SKILL_PATH), None),
+        (settings.langfuse_skill_document_prompt_name, _read(_SKILL_DOCUMENT_PATH), None),
+        (settings.langfuse_skill_dialogue_prompt_name, _read(_SKILL_DIALOGUE_PATH), None),
         (settings.langfuse_template_prompt_name, _read(_TEMPLATE_PATH), None),
         (
             settings.langfuse_system_prompt_name,
@@ -71,10 +68,12 @@ def main() -> None:
             config=config,
         )
         extra = f", config={config}" if config else ""
-        print(f"✓ uploaded prompt `{name}` ({len(content)} chars) → production{extra}")
+        print(f"✓ uploaded `{name}` ({len(content)} chars) → production{extra}")
 
     langfuse.flush()
-    print("\n完成。重启后端后即可从 Langfuse 拉取 prompt 与生成参数。")
+    print("\n完成。")
+    print("提示：旧的 prd-skill 已废弃，请在 Langfuse 删除或归档。")
+    print("当前使用：prd-skill-document · prd-skill-dialogue · prd-system · prd-template")
 
 
 if __name__ == "__main__":

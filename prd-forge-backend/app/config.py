@@ -51,8 +51,11 @@ class Settings(BaseSettings):
     langfuse_base_url: str = Field(
         default="https://cloud.langfuse.com", alias="LANGFUSE_BASE_URL"
     )
-    langfuse_skill_prompt_name: str = Field(
-        default="prd-skill", alias="LANGFUSE_SKILL_PROMPT_NAME"
+    langfuse_skill_document_prompt_name: str = Field(
+        default="prd-skill-document", alias="LANGFUSE_SKILL_DOCUMENT_PROMPT_NAME"
+    )
+    langfuse_skill_dialogue_prompt_name: str = Field(
+        default="prd-skill-dialogue", alias="LANGFUSE_SKILL_DIALOGUE_PROMPT_NAME"
     )
     langfuse_template_prompt_name: str = Field(
         default="prd-template", alias="LANGFUSE_TEMPLATE_PROMPT_NAME"
