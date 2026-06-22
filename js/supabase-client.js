@@ -126,7 +126,8 @@
         messages: session.messages || [],
         prd: session.prd || '',
         prd_versions: session.prdVersions || [],
-        status: session.status || 'pending'
+        status: session.status || 'pending',
+        deleted: 0
       };
     },
 
@@ -138,6 +139,7 @@
       const { data, error } = await sb
         .from('prd_sessions')
         .select('*')
+        .eq('deleted', 0)
         .order('updated_at', { ascending: false })
         .limit(50);
 
@@ -155,12 +157,15 @@
       if (error) throw new Error(error.message);
     },
 
-    async delete(sessionId) {
+    async remove(sessionId) {
       const sb = PrdForge.getSupabase();
       const { data: { user } } = await sb.auth.getUser();
       if (!user) throw new Error('未登录');
 
-      const { error } = await sb.from('prd_sessions').delete().eq('id', sessionId);
+      const { error } = await sb
+        .from('prd_sessions')
+        .update({ deleted: 1 })
+        .eq('id', sessionId);
       if (error) throw new Error(error.message);
     },
 
@@ -183,7 +188,8 @@
         messages: [{ role: 'user', content: pending.text, time: Date.now() }],
         prd: '',
         prd_versions: [],
-        status: 'pending'
+        status: 'pending',
+        deleted: 0
       };
 
       const { data, error } = await sb.from('prd_sessions').insert(row).select().single();
@@ -216,6 +222,7 @@
         prd: s.prd || '',
         prd_versions: s.prdVersions || [],
         status: s.status === 'generating' ? 'error' : (s.status || 'done'),
+        deleted: 0,
         created_at: s.createdAt ? new Date(s.createdAt).toISOString() : undefined,
         updated_at: s.updatedAt ? new Date(s.updatedAt).toISOString() : undefined
       }));

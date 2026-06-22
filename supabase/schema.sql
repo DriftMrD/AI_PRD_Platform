@@ -14,12 +14,17 @@ create table if not exists public.prd_sessions (
   prd_versions jsonb not null default '[]'::jsonb,
   status text not null default 'pending'
     check (status in ('pending', 'generating', 'done', 'error')),
+  deleted smallint not null default 0 check (deleted in (0, 1)),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists prd_sessions_user_updated_idx
   on public.prd_sessions (user_id, updated_at desc);
+
+create index if not exists prd_sessions_user_active_idx
+  on public.prd_sessions (user_id, updated_at desc)
+  where deleted = 0;
 
 create or replace function public.set_updated_at()
 returns trigger

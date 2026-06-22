@@ -214,6 +214,55 @@
       font-family: var(--font-note); font-size: 15px; line-height: 1.85;
       color: var(--ink-mid); white-space: pre-wrap; min-height: 200px;
     }
+    .prd-preview {
+      font-family: var(--font-body); font-size: 15px; line-height: 1.75;
+      color: var(--ink-mid); min-height: 200px; user-select: text;
+    }
+    .prd-preview h1, .prd-preview h2, .prd-preview h3, .prd-preview h4 {
+      font-family: var(--font-body); color: var(--ink-dark); font-weight: 600;
+      margin: 1.2em 0 0.5em; line-height: 1.35;
+    }
+    .prd-preview h1 { font-size: 1.6em; border-bottom: 2px solid var(--paper-border-lt); padding-bottom: 0.3em; }
+    .prd-preview h2 { font-size: 1.35em; border-bottom: 1px dashed var(--paper-border-lt); padding-bottom: 0.2em; }
+    .prd-preview h3 { font-size: 1.15em; }
+    .prd-preview h4 { font-size: 1.05em; color: var(--ink-mid); }
+    .prd-preview p { margin: 0.75em 0; }
+    .prd-preview ul, .prd-preview ol { margin: 0.5em 0; padding-left: 1.5em; }
+    .prd-preview li { margin: 0.25em 0; }
+    .prd-preview li > ul, .prd-preview li > ol { margin: 0.15em 0; }
+    .prd-preview blockquote {
+      margin: 1em 0; padding: 0.5em 1em;
+      border-left: 3px solid var(--accent-orange);
+      background: rgba(212,116,42,0.06); color: var(--ink-light);
+    }
+    .prd-preview code {
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em;
+      background: rgba(44,26,14,0.06); padding: 0.15em 0.4em; border-radius: 3px;
+    }
+    .prd-preview pre {
+      margin: 1em 0; padding: 12px 14px;
+      background: rgba(44,26,14,0.05); border: 1px solid var(--paper-border-lt);
+      border-radius: var(--radius-paper); overflow-x: auto;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .prd-preview pre code { background: none; padding: 0; }
+    .prd-preview table {
+      width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 14px;
+    }
+    .prd-preview th, .prd-preview td {
+      border: 1px solid var(--paper-border-lt); padding: 8px 12px; text-align: left;
+    }
+    .prd-preview th { background: rgba(250,244,228,0.9); font-weight: 600; }
+    .prd-preview tr:nth-child(even) td { background: rgba(250,244,228,0.4); }
+    .prd-preview hr {
+      border: none; border-top: 1px dashed var(--paper-border-lt); margin: 1.5em 0;
+    }
+    .prd-preview a { color: var(--accent-orange); text-decoration: none; }
+    .prd-preview a:hover { text-decoration: underline; }
+    .prd-preview strong { color: var(--ink-dark); font-weight: 600; }
+    .prd-preview input[type="checkbox"] {
+      margin-right: 0.4em; accent-color: var(--accent-orange); pointer-events: none;
+    }
     .prd-placeholder {
       font-family: var(--font-note); font-size: 16px; color: var(--ink-faint);
       text-align: center; padding: 60px 20px;
@@ -423,7 +472,8 @@
           <span class="version-strip-label">版本</span>
         </div>
         <div class="view-mode-tabs">
-          <button type="button" class="mode-tab active" data-mode="view">查看</button>
+          <button type="button" class="mode-tab active" data-mode="preview">预览</button>
+          <button type="button" class="mode-tab" data-mode="source">源码</button>
           <button type="button" class="mode-tab" data-mode="edit">编辑</button>
         </div>
       </div>
@@ -446,7 +496,8 @@
         <button type="button" class="sketch-btn primary" id="saveEditBarBtn">保存编辑</button>
       </div>
       <div class="prd-body">
-        <pre class="prd-content" id="prdContent"></pre>
+        <div class="prd-preview" id="prdPreview"></div>
+        <pre class="prd-content" id="prdContent" style="display:none"></pre>
         <textarea class="prd-editor" id="prdEditor" style="display:none" rows="20"></textarea>
         <div class="diff-view" id="diffView"></div>
         <div class="prd-placeholder" id="prdPlaceholder">PRD 文档将在这里实时生成</div>
@@ -459,8 +510,10 @@
   <script src="js/supabase-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/diff-match-patch@1.0.5/index.js"></script>
-  <script src="js/prd-versions.js"></script>
-  <script src="js/supabase-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <script src="js/prd-versions.js?v=2"></script>
+  <script src="js/supabase-client.js?v=2"></script>
   <script>
     const PENDING_KEY = 'prd_forge_pending';
     const DEFAULT_API_BASE = 'https://prd-forge-backend.onrender.com';
@@ -481,7 +534,7 @@
     let currentId = null;
     let generating = false;
     let viewMode = 'list';
-    let prdViewMode = 'view';
+    let prdViewMode = 'preview';
     let selectedVersion = null;
     let diffDecisions = {};
     let currentHunks = [];
@@ -490,6 +543,11 @@
     let reviewNewV = null;
     let editDirty = false;
     let editBaseline = '';
+    let previewRenderTimer = null;
+
+    if (typeof marked !== 'undefined') {
+      marked.setOptions({ breaks: true, gfm: true });
+    }
 
     const CHOICE_LABELS = {
       new: '采纳新版', old: '保留旧版', remove: '忽略', custom: '自定义', equal: '未改动'
@@ -505,6 +563,7 @@
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
     const prdContent = document.getElementById('prdContent');
+    const prdPreview = document.getElementById('prdPreview');
     const prdEditor = document.getElementById('prdEditor');
     const prdPlaceholder = document.getElementById('prdPlaceholder');
     const prdTitle = document.getElementById('prdTitle');
@@ -560,7 +619,7 @@
       if (!s) return;
       viewMode = 'detail';
       currentId = id;
-      prdViewMode = 'view';
+      prdViewMode = 'preview';
       pendingReview = false;
       selectedVersion = null;
       listView.classList.add('hidden');
@@ -618,7 +677,7 @@
       const title = s.title || '未命名';
       if (!confirm('确定删除「' + title + '」？\n\n对话、PRD 与版本历史将被永久删除，无法恢复。')) return;
       try {
-        await PrdForge.SessionStore.delete(id);
+        await PrdForge.SessionStore.remove(id);
       } catch (e) {
         showToast('删除失败：' + e.message, 'error');
         return;
@@ -704,7 +763,7 @@
           if (prdViewMode === 'edit' && editDirty && !confirm('有未保存的编辑，切换版本将丢失修改，继续吗？')) return;
           const wasEdit = prdViewMode === 'edit';
           pendingReview = false;
-          prdViewMode = 'view';
+          prdViewMode = 'preview';
           selectedVersion = ver.v;
           if (wasEdit) {
             editDirty = false;
@@ -739,6 +798,27 @@
       renderPrd();
     }
 
+    function renderMarkdown(text) {
+      if (!text) return '';
+      if (typeof marked === 'undefined') {
+        return '<pre class="md-fallback">' + escapeHtml(text) + '</pre>';
+      }
+      const html = marked.parse(text);
+      return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+    }
+
+    function updateStreamingPrd(text) {
+      prdContent.textContent = text;
+      prdPlaceholder.style.display = 'none';
+      prdPreview.style.display = 'block';
+      prdContent.style.display = 'none';
+      if (previewRenderTimer) clearTimeout(previewRenderTimer);
+      previewRenderTimer = setTimeout(() => {
+        prdPreview.innerHTML = renderMarkdown(text);
+        previewRenderTimer = null;
+      }, 150);
+    }
+
     function loadEditorContent(s) {
       const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
       const text = ver ? ver.content : s.prd;
@@ -748,12 +828,17 @@
     }
 
     function renderPrdBody(s, text) {
-      prdContent.textContent = text || '';
-      prdContent.style.display = prdViewMode === 'view' ? 'block' : 'none';
+      const content = text || '';
+      prdContent.textContent = content;
+      prdPreview.innerHTML = renderMarkdown(content);
+      prdPlaceholder.style.display = (content || s.prd) ? 'none' : 'block';
+      const isPreview = prdViewMode === 'preview';
+      const isSource = prdViewMode === 'source';
+      prdPreview.style.display = isPreview && content ? 'block' : 'none';
+      prdContent.style.display = isSource && content ? 'block' : 'none';
       prdEditor.style.display = prdViewMode === 'edit' ? 'block' : 'none';
       diffView.classList.toggle('visible', prdViewMode === 'review');
-      if (prdViewMode === 'edit') prdEditor.value = text || s.prd || '';
-      prdPlaceholder.style.display = (text || s.prd) ? 'none' : 'block';
+      if (prdViewMode === 'edit') prdEditor.value = content || s.prd || '';
     }
 
     function canRollbackTo(targetV) {
@@ -798,7 +883,7 @@
       }
 
       pendingReview = false;
-      prdViewMode = 'view';
+      prdViewMode = 'preview';
       delete diffView.dataset.reviewKey;
       s.messages.push({
         role: 'system',
@@ -1017,7 +1102,7 @@
       PrdForge.PrdVersions.ignoreVersion(s, reviewNewV, '第' + reviewNewV + '轮生成（已忽略）');
       selectedVersion = reviewBaseV;
       pendingReview = false;
-      prdViewMode = 'view';
+      prdViewMode = 'preview';
       delete diffView.dataset.reviewKey;
       s.messages.push({
         role: 'assistant',
@@ -1046,7 +1131,7 @@
       if (entry) entry.messageCount = s.messages.length;
       selectedVersion = reviewNewV;
       pendingReview = false;
-      prdViewMode = 'view';
+      prdViewMode = 'preview';
       delete diffView.dataset.reviewKey;
       await persistCurrent();
       renderPrd();
@@ -1068,12 +1153,15 @@
 
       if (s.status === 'generating') {
         prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…';
-        prdContent.textContent = s.prd || '';
-        prdContent.style.display = s.prd ? 'block' : 'none';
+        const streaming = s.prd || '';
+        prdContent.textContent = streaming;
+        prdPreview.innerHTML = renderMarkdown(streaming);
+        prdPreview.style.display = streaming ? 'block' : 'none';
+        prdContent.style.display = 'none';
         prdEditor.style.display = 'none';
         diffView.classList.remove('visible');
         reviewBar.classList.remove('visible');
-        prdPlaceholder.style.display = s.prd ? 'none' : 'block';
+        prdPlaceholder.style.display = streaming ? 'none' : 'block';
         if (rollbackVersionBtn) rollbackVersionBtn.style.display = 'none';
         return;
       }
@@ -1087,6 +1175,7 @@
       }
 
       if (!hasContent) {
+        prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
         prdEditor.style.display = 'none';
         diffView.classList.remove('visible');
@@ -1103,6 +1192,7 @@
       renderVersionStrip(s);
 
       if (prdViewMode === 'review' && pendingReview) {
+        prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
         prdEditor.style.display = 'none';
         prdPlaceholder.style.display = 'none';
@@ -1113,6 +1203,7 @@
           renderReviewView();
         }
       } else if (prdViewMode === 'edit') {
+        prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
         diffView.classList.remove('visible');
         prdEditor.style.display = 'block';
@@ -1149,6 +1240,8 @@
       sendBtn.textContent = '生成中…';
       session.status = 'generating';
       session.prd = '';
+      prdPreview.innerHTML = '';
+      prdPreview.style.display = 'none';
       prdContent.textContent = '';
       prdContent.style.display = 'none';
       prdPlaceholder.textContent = statusMsg || '正在连接后端，等待模型返回首字…';
@@ -1198,12 +1291,10 @@
           if (eventName === 'chunk' && payload.delta) {
             removeTypingBubble();
             session.prd += payload.delta;
-            prdContent.textContent = session.prd;
-            prdContent.style.display = 'block';
-            prdPlaceholder.style.display = 'none';
+            updateStreamingPrd(session.prd);
             gotAnyChunk = true;
             prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…（' + session.prd.length + ' 字）';
-            prdContent.closest('.prd-body').scrollTop = prdContent.closest('.prd-body').scrollHeight;
+            prdPreview.closest('.prd-body').scrollTop = prdPreview.closest('.prd-body').scrollHeight;
           } else if (eventName === 'progress' && payload.message) {
             updateTypingBubble(payload.message);
             prdTitle.innerHTML = '<span class="dot warm"></span> ' + escapeHtml(payload.message);
@@ -1341,7 +1432,7 @@
       editDirty = false;
       editBaseline = text;
       await persistCurrent();
-      setPrdViewMode('view');
+      setPrdViewMode('preview');
       showToast('已保存为 v' + selectedVersion, 'success');
     }
 
@@ -1398,7 +1489,7 @@
     cancelEditBtn.addEventListener('click', () => {
       if (editDirty && !confirm('放弃未保存的编辑？')) return;
       editDirty = false;
-      setPrdViewMode('view');
+      setPrdViewMode('preview');
     });
     prdEditor.addEventListener('input', () => {
       editDirty = prdEditor.value !== editBaseline;
