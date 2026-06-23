@@ -63,6 +63,7 @@ const PrdForgeFeishu = (() => {
   }
 
   /* ---------- SDK 初始化 ---------- */
+  function loadScript(src) {
     return new Promise((resolve, reject) => {
       if (document.querySelector('script[src="' + src + '"]')) {
         resolve();
