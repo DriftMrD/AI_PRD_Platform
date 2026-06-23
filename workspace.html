@@ -760,13 +760,22 @@
         url.searchParams.delete('auth_ok');
         url.searchParams.delete('state');
         window.history.replaceState({}, '', url.toString());
-        // 如果之前有待分享，重新打开分享弹窗
+        // 如果之前有待分享，直接弹出分享弹窗（不经过按钮内容校验）
         if (sessionStorage.getItem('feishu_share_pending') === '1') {
           sessionStorage.removeItem('feishu_share_pending');
-          // 触发分享按钮
           setTimeout(() => {
-            document.getElementById('feishuShareBtn').click();
-          }, 500);
+            const s = getCurrent();
+            const content = getExportablePrdText(s) || '';
+            const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
+            const title = (s?.title || 'PRD 文档') + ' · ' + vLabel;
+
+            _pendingShare = { apiBase: API_BASE, content, title, vLabel, onToast: showToast };
+            shareVersionBadge.textContent = vLabel;
+            shareSearchInput.value = '';
+            shareResults.innerHTML = '';
+            shareOverlay.classList.add('visible');
+            showSearchUI();
+          }, 800);
         }
       }
       if (params.has('auth_error')) {
