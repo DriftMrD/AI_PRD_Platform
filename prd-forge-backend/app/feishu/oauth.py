@@ -167,11 +167,13 @@ def _signing_key() -> bytes:
     ).digest()
 
 
+_SESSION_VERSION = "v2"
+
 def create_session(token_data: dict) -> str:
     """将 token 编码为 HMAC 签名的自包含 session token。
 
     数据直接嵌在 token 内（base64），不依赖内存存储，Render 重启不丢。
-    格式：base64(payload).hex_signature(32)
+    格式：v2.base64(payload).hex_signature(32)
     """
     payload = _json.dumps({
         "at": token_data.get("access_token", ""),
@@ -181,7 +183,7 @@ def create_session(token_data: dict) -> str:
 
     encoded = base64.urlsafe_b64encode(payload).decode()
     sig = hmac.new(_signing_key(), encoded.encode(), hashlib.sha256).hexdigest()[:32]
-    session_token = f"{encoded}.{sig}"
+    session_token = f"{_SESSION_VERSION}.{encoded}.{sig}"
 
     # 同时写内存 store（兼容旧逻辑 + Render 热缓存加速）
     _SESSION_STORE[session_token] = {
@@ -196,8 +198,13 @@ def get_token_by_session(session_token: str) -> str | None:
     """通过 session token 获取 access_token。
 
     优先查内存 store（快），miss 则从自包含 payload 解码（跨 Render 重启）。
-    HMAC 签名验证防篡改。
+    HMAC 签名验证防篡改。v2 版本带版本前缀，旧版 token 直接拒绝。
     """
+    # 0. 版本检查：旧 token（无 v2. 前缀）直接拒绝
+    if not session_token.startswith(f"{_SESSION_VERSION}."):
+        logger.warning("飞书 session token 版本过旧（需重新授权），got: %s...", session_token[:20])
+        return None
+
     # 1. 内存 store（Render 实例热时最快）
     entry = _SESSION_STORE.get(session_token)
     if entry and time.time() < entry["expires_at"]:
@@ -205,10 +212,8 @@ def get_token_by_session(session_token: str) -> str | None:
 
     # 2. 自包含 payload（Render 重启后仍可用）
     try:
-        parts = session_token.rsplit(".", 1)
-        if len(parts) != 2:
-            return None
-        encoded, sig = parts
+        # 格式：v2.encoded.sig
+        _, encoded, sig = session_token.split(".", 2)
 
         # HMAC 签名验证
         expected_sig = hmac.new(_signing_key(), encoded.encode(), hashlib.sha256).hexdigest()[:32]
