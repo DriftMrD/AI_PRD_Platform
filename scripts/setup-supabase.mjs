@@ -68,18 +68,35 @@ async function runSchema(token, projectRef) {
   console.log('  ✓ prd_sessions 表 + RLS 已创建');
 }
 
+async function runTranssionEmailMigration(token, projectRef) {
+  const migrationPath = join(ROOT, 'supabase', 'migration_transsion_email_only.sql');
+  const sql = readFileSync(migrationPath, 'utf8');
+  console.log('→ 步骤 2b：限制仅 @transsion.com 可注册 …');
+  await apiFetch(token, `/projects/${projectRef}/database/query`, {
+    method: 'POST',
+    body: JSON.stringify({ query: sql }),
+  });
+  console.log('  ✓ 已添加 auth.users 邮箱域名校验触发器');
+}
+
 async function configureAuth(token, projectRef, siteUrl, redirectUrls) {
-  console.log('→ 步骤 3：配置邮箱登录（免确认邮件）…');
+  console.log('→ 步骤 3：配置邮箱登录（注册需验证码确认）…');
   await apiFetch(token, `/projects/${projectRef}/config/auth`, {
     method: 'PATCH',
     body: JSON.stringify({
       external_email_enabled: true,
-      mailer_autoconfirm: true,
+      mailer_autoconfirm: false,
       site_url: siteUrl,
       uri_allow_list: redirectUrls,
+      mailer_subjects_confirmation: 'PRD Forge 注册验证码',
+      mailer_templates_confirmation_content:
+        '<h2>PRD Forge 注册验证</h2>' +
+        '<p>您的验证码是：<strong>{{ .Token }}</strong></p>' +
+        '<p>验证码有效期约 1 小时。如非本人操作请忽略此邮件。</p>',
     }),
   });
-  console.log('  ✓ Email 已开启，注册后可直接登录');
+  console.log('  ✓ Email 已开启，注册需邮箱验证码确认');
+  console.log('  ✓ 确认邮件模板已包含 6 位验证码');
   console.log('  ✓ Site URL / Redirect URLs 已设置');
 }
 
@@ -148,6 +165,7 @@ async function main() {
   console.log(`\nSupabase 项目: ${projectRef}\n`);
 
   await runSchema(token, projectRef);
+  await runTranssionEmailMigration(token, projectRef);
   await configureAuth(token, projectRef, siteUrl, redirectUrls);
   writeFrontendConfig(url, anonKey);
   await verifyTable(url, anonKey);

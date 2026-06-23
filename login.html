@@ -60,6 +60,16 @@
     .back { display: inline-block; margin-top: 16px; font-family: var(--font-note); font-size: 14px; color: var(--ink-light); text-decoration: none; }
     .back:hover { color: var(--ink-dark); }
     .hint { font-size: 12px; color: var(--ink-faint); margin-top: 4px; font-family: var(--font-note); }
+    .email-row { display: flex; gap: 8px; align-items: stretch; }
+    .email-row input { flex: 1; min-width: 0; }
+    .secondary-btn {
+      flex-shrink: 0; padding: 10px 12px; border: 2px solid var(--paper-border);
+      background: transparent; color: var(--ink-mid); font-family: var(--font-note);
+      font-size: 14px; cursor: pointer; border-radius: var(--radius-paper); white-space: nowrap;
+    }
+    .secondary-btn:hover:not(:disabled) { background: rgba(245,237,214,0.8); color: var(--ink-dark); }
+    .secondary-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .success { color: #2d6a2d; font-family: var(--font-note); font-size: 13px; margin-top: 8px; min-height: 18px; }
   </style>
 </head>
 <body>
@@ -80,14 +90,23 @@
     <form id="authForm">
       <div class="field">
         <label for="email">邮箱</label>
-        <input type="email" id="email" required autocomplete="email" placeholder="you@example.com">
+        <input type="email" id="email" required autocomplete="email" placeholder="name@transsion.com">
+        <div class="hint" id="emailHint" style="display:none">仅支持 @transsion.com 企业邮箱注册</div>
       </div>
       <div class="field">
         <label for="password">密码</label>
         <input type="password" id="password" required minlength="6" autocomplete="current-password" placeholder="至少 6 位">
-        <div class="hint" id="signupHint" style="display:none">注册后请查收确认邮件（若开启了邮箱验证）</div>
+      </div>
+      <div class="field" id="otpField" style="display:none">
+        <label for="otpCode">邮箱验证码</label>
+        <div class="email-row">
+          <input type="text" id="otpCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="6 位验证码">
+          <button type="button" class="secondary-btn" id="resendBtn" disabled>重新发送</button>
+        </div>
+        <div class="hint">验证码已发送至邮箱，请查收（有效期约 1 小时）</div>
       </div>
       <button type="submit" class="submit-btn" id="submitBtn">登录</button>
+      <div class="success" id="successMsg"></div>
       <div class="error" id="errorMsg"></div>
     </form>
 
@@ -98,7 +117,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-client.js?v=2"></script>
   <script>
+    const ALLOWED_EMAIL_DOMAIN = 'transsion.com';
+    const RESEND_COOLDOWN_SEC = 60;
+
     let mode = 'signin';
+    let signupCodeSent = false;
+    let resendTimer = null;
+    let resendRemaining = 0;
+
     const params = new URLSearchParams(location.search);
     const redirect = params.get('redirect') || 'index.html';
     const isSetup = params.get('setup') === '1';
@@ -108,7 +134,73 @@
     const authForm = document.getElementById('authForm');
     const submitBtn = document.getElementById('submitBtn');
     const errorMsg = document.getElementById('errorMsg');
-    const signupHint = document.getElementById('signupHint');
+    const successMsg = document.getElementById('successMsg');
+    const emailHint = document.getElementById('emailHint');
+    const otpField = document.getElementById('otpField');
+    const otpCodeInput = document.getElementById('otpCode');
+    const resendBtn = document.getElementById('resendBtn');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+
+    function isAllowedEmail(email) {
+      const at = email.lastIndexOf('@');
+      if (at < 1) return false;
+      return email.slice(at + 1).toLowerCase() === ALLOWED_EMAIL_DOMAIN;
+    }
+
+    function clearMessages() {
+      errorMsg.textContent = '';
+      successMsg.textContent = '';
+    }
+
+    function resetSignupFlow() {
+      signupCodeSent = false;
+      otpField.style.display = 'none';
+      otpCodeInput.value = '';
+      otpCodeInput.required = false;
+      clearResendTimer();
+      updateSignupUi();
+    }
+
+    function clearResendTimer() {
+      if (resendTimer) {
+        clearInterval(resendTimer);
+        resendTimer = null;
+      }
+      resendRemaining = 0;
+      resendBtn.disabled = true;
+      resendBtn.textContent = '重新发送';
+    }
+
+    function startResendCooldown(seconds) {
+      clearResendTimer();
+      resendRemaining = seconds;
+      resendBtn.disabled = true;
+      resendBtn.textContent = `${resendRemaining}s 后可重发`;
+      resendTimer = setInterval(() => {
+        resendRemaining -= 1;
+        if (resendRemaining <= 0) {
+          clearResendTimer();
+          resendBtn.disabled = false;
+          resendBtn.textContent = '重新发送';
+          return;
+        }
+        resendBtn.textContent = `${resendRemaining}s 后可重发`;
+      }, 1000);
+    }
+
+    function updateSignupUi() {
+      const isSignup = mode === 'signup';
+      emailHint.style.display = isSignup ? 'block' : 'none';
+      emailInput.placeholder = isSignup ? 'name@transsion.com' : 'name@transsion.com';
+
+      if (!isSignup) {
+        submitBtn.textContent = '登录';
+        return;
+      }
+
+      submitBtn.textContent = signupCodeSent ? '完成注册' : '发送验证码';
+    }
 
     if (!PrdForge.isConfigured() || isSetup) {
       setupBox.style.display = 'block';
@@ -121,11 +213,85 @@
       tab.addEventListener('click', () => {
         mode = tab.dataset.mode;
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
-        submitBtn.textContent = mode === 'signin' ? '登录' : '注册';
-        signupHint.style.display = mode === 'signup' ? 'block' : 'none';
-        errorMsg.textContent = '';
-        document.getElementById('password').autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+        resetSignupFlow();
+        clearMessages();
+        passwordInput.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
+        updateSignupUi();
       });
+    });
+
+    async function sendSignupCode() {
+      const sb = PrdForge.getSupabase();
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!isAllowedEmail(email)) {
+        throw new Error('仅支持 @transsion.com 企业邮箱注册');
+      }
+      if (password.length < 6) {
+        throw new Error('密码至少 6 位');
+      }
+
+      const { data, error } = await sb.auth.signUp({ email, password });
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        if (msg.includes('already registered') || msg.includes('already exists')) {
+          const { error: resendError } = await sb.auth.resend({ type: 'signup', email });
+          if (resendError) throw resendError;
+        } else {
+          throw error;
+        }
+      } else if (data.session) {
+        location.href = redirect;
+        return;
+      }
+
+      signupCodeSent = true;
+      otpField.style.display = 'block';
+      otpCodeInput.required = true;
+      successMsg.textContent = '验证码已发送，请查收邮箱';
+      startResendCooldown(RESEND_COOLDOWN_SEC);
+      updateSignupUi();
+      otpCodeInput.focus();
+    }
+
+    async function verifySignupCode() {
+      const sb = PrdForge.getSupabase();
+      const email = emailInput.value.trim();
+      const token = otpCodeInput.value.trim();
+
+      if (!/^\d{6}$/.test(token)) {
+        throw new Error('请输入 6 位数字验证码');
+      }
+
+      const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'signup' });
+      if (error) throw error;
+      if (!data.session) throw new Error('验证成功但未获得登录会话，请尝试登录');
+      location.href = redirect;
+    }
+
+    resendBtn.addEventListener('click', async () => {
+      if (!PrdForge.isConfigured() || mode !== 'signup' || !signupCodeSent) return;
+
+      const email = emailInput.value.trim();
+      if (!isAllowedEmail(email)) {
+        errorMsg.textContent = '仅支持 @transsion.com 企业邮箱注册';
+        return;
+      }
+
+      resendBtn.disabled = true;
+      clearMessages();
+
+      try {
+        const sb = PrdForge.getSupabase();
+        const { error } = await sb.auth.resend({ type: 'signup', email });
+        if (error) throw error;
+        successMsg.textContent = '验证码已重新发送';
+        startResendCooldown(RESEND_COOLDOWN_SEC);
+      } catch (err) {
+        errorMsg.textContent = err.message || '发送失败';
+        resendBtn.disabled = false;
+      }
     });
 
     authForm.addEventListener('submit', async (e) => {
@@ -133,26 +299,37 @@
       if (!PrdForge.isConfigured()) return;
 
       const sb = PrdForge.getSupabase();
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
 
       submitBtn.disabled = true;
-      errorMsg.textContent = '';
+      clearMessages();
 
       try {
         if (mode === 'signin') {
           const { error } = await sb.auth.signInWithPassword({ email, password });
           if (error) throw error;
-        } else {
-          const { error } = await sb.auth.signUp({ email, password });
-          if (error) throw error;
+          location.href = redirect;
+          return;
         }
-        location.href = redirect;
+
+        if (!isAllowedEmail(email)) {
+          throw new Error('仅支持 @transsion.com 企业邮箱注册');
+        }
+
+        if (!signupCodeSent) {
+          await sendSignupCode();
+        } else {
+          await verifySignupCode();
+        }
       } catch (err) {
         errorMsg.textContent = err.message || '操作失败';
+      } finally {
         submitBtn.disabled = false;
       }
     });
+
+    updateSignupUi();
 
     (async function checkExistingSession() {
       if (!PrdForge.isConfigured()) return;

@@ -466,6 +466,7 @@
           <button type="button" class="sketch-btn" id="saveEditBtn" style="display:none">保存编辑</button>
           <button class="sketch-btn" id="copyBtn">复制</button>
           <button class="sketch-btn" id="downloadBtn">下载</button>
+          <button class="sketch-btn" id="feishuShareBtn">分享</button>
         </div>
       </div>
       <div class="prd-toolbar" id="prdToolbar" style="display:none">
@@ -1547,6 +1548,24 @@
       a.click();
       URL.revokeObjectURL(url);
       if (selectedVersion) showToast('已下载 v' + selectedVersion, 'success');
+    });
+
+    // -- 分享（飞书一键转发）--
+    document.getElementById('feishuShareBtn').addEventListener('click', () => {
+      const s = getCurrent();
+      const text = getExportablePrdText(s);
+      if (!text || !text.trim()) {
+        showToast('没有可分享的内容', 'error');
+        return;
+      }
+      const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
+      const shareText = '【' + (s?.title || 'PRD 文档') + ' · ' + vLabel + '】\n\n' + text;
+      navigator.clipboard.writeText(shareText).then(() => {
+        showToast('已分享 ' + vLabel + '，内容已复制到剪贴板并尝试打开飞书', 'success');
+        window.open('https://applink.feishu.cn/client/chat/open?', '_blank');
+      }).catch(() => {
+        showToast('复制失败，请手动复制', 'error');
+      });
     });
 
     document.querySelectorAll('.mode-tab').forEach(tab => {
