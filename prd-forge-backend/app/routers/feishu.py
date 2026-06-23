@@ -99,6 +99,21 @@ async def feishu_search_contacts(body: SearchContactsRequest) -> JSONResponse:
     return JSONResponse(result.data)
 
 
+@router.post("/feishu/debug-search")
+async def feishu_debug_search(body: SearchContactsRequest) -> JSONResponse:
+    """调试：返回飞书 API 原始响应 + 解析后的用户数据。"""
+    from app.feishu import openapi as _oa
+    raw = await _oa._feishu_get(
+        "/contact/v3/users",
+        params={"page_size": 3, "name": body.query},
+    )
+    items = raw.get("data", {}).get("items", [])
+    return JSONResponse({
+        "raw_first_item": items[0] if items else None,
+        "raw_item_count": len(items),
+    })
+
+
 # --------------- 新增：发送 MD 文件 ---------------
 
 @router.post("/feishu/share-file")
