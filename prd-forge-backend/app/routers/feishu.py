@@ -1,16 +1,22 @@
-"""飞书相关接口：分享、JSSDK、联系人搜索、文件发送。"""
+"""飞书相关接口：分享、JSSDK、OAuth 授权、联系人搜索、文件发送。"""
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.feishu.feishu_contacts import search_contacts
 from app.feishu.jssdk import build_jssdk_config
+from app.feishu.oauth import (
+    build_authorize_url,
+    exchange_code,
+    extract_user_token_from_request,
+    store_token,
+)
 from app.feishu.send_file import send_md_file_to_user
 from app.feishu.share_store import consume, create
 
@@ -35,6 +41,54 @@ class ShareFileRequest(BaseModel):
     title: str = Field(default="PRD 文档", max_length=200, description="文件标题（不含扩展名）")
     version_label: str | None = Field(default=None, max_length=20, description="版本号如 v3")
     recipient_open_id: str = Field(..., description="收件人飞书 open_id")
+
+
+# --------------- OAuth 授权 ---------------
+
+@router.get("/feishu/oauth/status")
+async def feishu_oauth_status(request: Request) -> JSONResponse:
+    """检查用户是否已授权飞书。"""
+    token = extract_user_token_from_request(request)
+    if token:
+        return JSONResponse({"authorized": True})
+    return JSONResponse({
+        "authorized": False,
+        "authorize_url": build_authorize_url(),
+    })
+
+
+@router.get("/feishu/oauth/callback")
+async def feishu_oauth_callback(
+    code: str = Query(...),
+    state: str = Query(default=""),
+) -> RedirectResponse:
+    """飞书 OAuth 回调：用 code 换 token → 写 cookie → 重定向回首页。"""
+    try:
+        token_data = await exchange_code(code)
+    except Exception as exc:
+        logger.exception("OAuth token exchange failed: %s", exc)
+        return RedirectResponse(url="/?auth_error=1", status_code=302)
+
+    open_id = token_data.get("open_id", "")
+    if open_id:
+        store_token(open_id, token_data)
+
+    # 重定向回 workspace.html（不带 code 参数）
+    redirect_url = f"/workspace.html?auth_ok=1"
+    if state:
+        redirect_url += f"&state={state}"
+
+    response = RedirectResponse(url=redirect_url, status_code=302)
+    # 写 httpOnly cookie 存 open_id（token 本身存服务端缓存）
+    response.set_cookie(
+        key="feishu_user_open_id",
+        value=open_id,
+        httponly=True,
+        secure=False,  # Render 支持 HTTPS，但开发环境可能 HTTP
+        samesite="lax",
+        max_age=7200,
+    )
+    return response
 
 
 # --------------- H5 JSAPI 分享（已有） ---------------
@@ -88,18 +142,19 @@ async def feishu_jssdk_config(
         )
 
 
-# --------------- 新增：联系人搜索 ---------------
+# --------------- 联系人搜索 ---------------
 
 @router.post("/feishu/search-contacts")
-async def feishu_search_contacts(body: SearchContactsRequest) -> JSONResponse:
-    """按姓名搜索飞书联系人。"""
-    result = await search_contacts(body.query)
+async def feishu_search_contacts(body: SearchContactsRequest, request: Request) -> JSONResponse:
+    """按姓名搜索飞书联系人（有 user token 则返回真实姓名）。"""
+    user_token = extract_user_token_from_request(request)
+    result = await search_contacts(body.query, user_access_token=user_token)
     if not result.ok:
         raise HTTPException(status_code=502, detail=result.error_message or "搜索失败")
     return JSONResponse(result.data)
 
 
-# --------------- 新增：发送 MD 文件 ---------------
+# --------------- 发送 MD 文件 ---------------
 
 @router.post("/feishu/share-file")
 async def feishu_share_file(body: ShareFileRequest) -> JSONResponse:

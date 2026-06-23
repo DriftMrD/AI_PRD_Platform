@@ -17,10 +17,10 @@ class SearchResult:
     error_message: str | None = None
 
 
-async def search_contacts(query: str, limit: int = 20) -> SearchResult:
+async def search_contacts(query: str, limit: int = 20, *, user_access_token: str | None = None) -> SearchResult:
     """按姓名搜索飞书联系人，返回 open_id + 姓名。"""
     try:
-        users = await openapi.search_users(query, page_size=limit)
+        users = await openapi.search_users(query, page_size=limit, user_access_token=user_access_token)
         return SearchResult(ok=True, data={"users": users})
     except Exception as exc:
         msg = str(exc)

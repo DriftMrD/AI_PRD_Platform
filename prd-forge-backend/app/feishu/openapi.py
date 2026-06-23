@@ -1,5 +1,9 @@
 """飞书 OpenAPI 直连：搜索用户、上传文件、发送消息。
 替代 lark-cli，直接通过飞书服务端 OpenAPI 调用，适用于 Render 等云端环境。
+
+支持两种 token 模式：
+- tenant_access_token（应用身份）：仅能拿到 open_id
+- user_access_token（用户身份）：能拿到姓名、邮箱、部门等完整信息
 """
 
 from __future__ import annotations
@@ -18,17 +22,24 @@ logger = logging.getLogger(__name__)
 _FEISHU_API = "https://open.feishu.cn/open-apis"
 
 
-async def _get_token() -> str:
-    """获取 tenant_access_token（复用 jssdk 中的缓存 + 刷新逻辑）。"""
+async def _get_token(user_access_token: str | None = None) -> str:
+    """获取 token：优先用 user_access_token，否则用 tenant_access_token。"""
+    if user_access_token:
+        return user_access_token
     settings = get_settings()
     if not settings.feishu_app_id or not settings.feishu_app_secret:
         raise RuntimeError("未配置 FEISHU_APP_ID / FEISHU_APP_SECRET，无法调用飞书 API")
     return await _tenant_access_token(settings.feishu_app_id, settings.feishu_app_secret)
 
 
-async def _feishu_get(path: str, params: dict[str, Any] | None = None) -> dict:
+async def _feishu_get(
+    path: str,
+    params: dict[str, Any] | None = None,
+    *,
+    user_access_token: str | None = None,
+) -> dict:
     """带 token 的飞书 GET。"""
-    token = await _get_token()
+    token = await _get_token(user_access_token)
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(
             f"{_FEISHU_API}{path}",
@@ -42,9 +53,15 @@ async def _feishu_get(path: str, params: dict[str, Any] | None = None) -> dict:
     return data
 
 
-async def _feishu_post(path: str, body: dict | None = None, files: dict | None = None) -> dict:
+async def _feishu_post(
+    path: str,
+    body: dict | None = None,
+    files: dict | None = None,
+    *,
+    user_access_token: str | None = None,
+) -> dict:
     """带 token 的飞书 POST（JSON 或 multipart）。"""
-    token = await _get_token()
+    token = await _get_token(user_access_token)
     async with httpx.AsyncClient(timeout=30.0) as client:
         if files:
             resp = await client.post(
@@ -68,15 +85,21 @@ async def _feishu_post(path: str, body: dict | None = None, files: dict | None =
     return data
 
 
-async def search_users(query: str, page_size: int = 20) -> list[dict]:
-    """搜索飞书用户（通过通讯录 scope:all/v3 接口）。
+async def search_users(
+    query: str,
+    page_size: int = 20,
+    *,
+    user_access_token: str | None = None,
+) -> list[dict]:
+    """搜索飞书用户（应用身份走 contact/v3/users，用户身份能拿到姓名）。
 
-    注意：飞书应用需要 contact:user:readonly 权限才能返回姓名、邮箱等。
-    未配置时 name 回退显示 open_id 片段。
+    当传入 user_access_token 时，优先以用户身份调用（可拿到完整姓名/邮箱/部门）。
     """
+    # 用户身份 → API 返回 name/email 等完整字段
     data = await _feishu_get(
         "/contact/v3/users",
         params={"page_size": page_size, "name": query},
+        user_access_token=user_access_token,
     )
     items = data.get("data", {}).get("items", [])
     results: list[dict] = []
@@ -86,12 +109,13 @@ async def search_users(query: str, page_size: int = 20) -> list[dict]:
         email = item.get("email", "")
         dept_ids: list[str] = item.get("department_ids", []) or []
 
-        # fallback: 逐个查用户详情（配置 contact:user:readonly 后可拿到姓名）
+        # fallback: 逐个查用户详情
         if not name and oid:
             try:
                 detail = await _feishu_get(
                     f"/contact/v3/users/{oid}",
                     params={"user_id_type": "open_id"},
+                    user_access_token=user_access_token,
                 )
                 user = detail.get("data", {}).get("user", {})
                 name = user.get("name", "")
@@ -104,7 +128,7 @@ async def search_users(query: str, page_size: int = 20) -> list[dict]:
         if not name:
             name = f"用户 {oid[:12]}…" if len(oid) > 12 else f"用户 {oid}"
 
-        department = await _resolve_dept_path(dept_ids) if dept_ids else ""
+        department = await _resolve_dept_path(dept_ids, user_access_token=user_access_token) if dept_ids else ""
         results.append({
             "open_id": oid,
             "name": name,
@@ -114,13 +138,18 @@ async def search_users(query: str, page_size: int = 20) -> list[dict]:
     return results
 
 
-async def _resolve_dept_path(dept_ids: list[str]) -> str:
+async def _resolve_dept_path(
+    dept_ids: list[str],
+    *,
+    user_access_token: str | None = None,
+) -> str:
     """将部门 ID 列表解析为可读路径（取第一个）。"""
     if not dept_ids:
         return ""
     try:
         data = await _feishu_get(
             f"/contact/v3/departments/{dept_ids[0]}",
+            user_access_token=user_access_token,
         )
         dept = data.get("data", {}).get("department", {})
         return dept.get("name", "")

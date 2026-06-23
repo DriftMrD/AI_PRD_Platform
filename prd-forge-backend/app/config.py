@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     # 飞书 H5 JSAPI（可选；配齐 app id + secret 后启用分享选人）
     feishu_app_id: str | None = Field(default=None, alias="FEISHU_APP_ID")
     feishu_app_secret: str | None = Field(default=None, alias="FEISHU_APP_SECRET")
+    # 飞书 OAuth 回调地址（授权后将 code 送回后端）
+    feishu_oauth_redirect_uri: str | None = Field(default=None, alias="FEISHU_OAUTH_REDIRECT_URI")
 
     @property
     def feishu_enabled(self) -> bool:

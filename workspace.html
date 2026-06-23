@@ -500,6 +500,24 @@
     .share-sent-icon {
       margin-left: auto; color: var(--accent-green); font-size: 18px;
     }
+    /* 飞书授权提示 */
+    .share-auth-prompt {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 28px 20px 24px; text-align: center;
+    }
+    .share-auth-prompt.hidden { display: none; }
+    .share-auth-icon { font-size: 36px; margin-bottom: 10px; }
+    .share-auth-text {
+      font-family: var(--font-body); font-size: 13px; color: var(--ink-light);
+      margin-bottom: 4px; line-height: 1.6;
+    }
+    .share-auth-skip {
+      font-family: var(--font-body); font-size: 12px; color: var(--ink-faint);
+      cursor: pointer; margin-top: 10px; text-decoration: underline;
+      opacity: 0.6; transition: opacity 0.2s;
+    }
+    .share-auth-skip:hover { opacity: 1; }
+    .share-search-wrap.hidden { display: none; }
     @media (max-width: 860px) {
       .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
       .panel-left { border-right: none; border-bottom: 2px solid var(--paper-border); }
@@ -590,10 +608,18 @@
   <div class="share-overlay" id="shareOverlay">
     <div class="share-dialog">
       <div class="share-dialog-header">
-        <span class="share-dialog-title">分享到飞书<span class="share-version-badge" id="shareVersionBadge">v-</span></span>
+        <span class="share-dialog-title" id="shareDialogTitle">分享到飞书<span class="share-version-badge" id="shareVersionBadge">v-</span></span>
         <button class="share-dialog-close" id="shareDialogClose">&times;</button>
       </div>
-      <div class="share-search-wrap">
+      <!-- 未授权 -->
+      <div class="share-auth-prompt" id="shareAuthPrompt">
+        <div class="share-auth-icon">🔐</div>
+        <div class="share-auth-text">需要授权飞书账号，才能搜索联系人姓名</div>
+        <button class="sketch-btn" id="shareAuthBtn" style="margin-top:8px;background:var(--accent-orange);color:#fff;border-color:var(--accent-orange);">授权飞书</button>
+        <div class="share-auth-skip" id="shareAuthSkip">跳过授权，直接搜索（不显示姓名）</div>
+      </div>
+      <!-- 已授权 / 跳过授权 -->
+      <div class="share-search-wrap" id="shareSearchWrap">
         <input class="share-search-input" id="shareSearchInput" placeholder="搜索飞书联系人…" autocomplete="off" />
       </div>
       <div class="share-results" id="shareResults">
@@ -633,11 +659,36 @@
     const shareVersionBadge = document.getElementById('shareVersionBadge');
     const shareSearchInput = document.getElementById('shareSearchInput');
     const shareResults = document.getElementById('shareResults');
+    const shareAuthPrompt = document.getElementById('shareAuthPrompt');
+    const shareSearchWrap = document.getElementById('shareSearchWrap');
+    const shareDialogTitle = document.getElementById('shareDialogTitle');
     let _pendingShare = null;
     let _shareSearchTimer = null;
+    let _feishuAuthorized = false;       // 当前是否已授权
+    let _feishuAuthChecked = false;      // 是否已尝试过检测
+    let _authSkipped = false;            // 用户选择跳过授权
+
+    // 检测飞书 OAuth 授权状态
+    async function checkFeishuOAuth() {
+      if (_feishuAuthChecked) return _feishuAuthorized;
+      try {
+        const res = await fetch(API_BASE + '/api/feishu/oauth/status', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          _feishuAuthorized = !!data.authorized;
+          // 缓存 authorize_url 供授权按钮使用
+          if (!data.authorized && data.authorize_url) {
+            _pendingAuthUrl = data.authorize_url;
+          }
+        }
+      } catch (e) { /* 网络错误，当作未授权处理 */ }
+      _feishuAuthChecked = true;
+      return _feishuAuthorized;
+    }
+    let _pendingAuthUrl = null;
 
     PrdForgeFeishu.registerBrowserDialog({
-      open({ apiBase, _shareText, title, vLabel, onToast }) {
+      async open({ apiBase, _shareText, title, vLabel, onToast }) {
         const s = getCurrent();
         const content = getExportablePrdText(s);
         _pendingShare = { apiBase, content, title: s?.title || title, vLabel, onToast };
@@ -645,9 +696,76 @@
         shareSearchInput.value = '';
         shareResults.innerHTML = '<div class="share-result-empty">输入姓名搜索飞书联系人</div>';
         shareOverlay.classList.add('visible');
-        setTimeout(() => shareSearchInput.focus(), 100);
+
+        // 检查授权状态
+        const authorized = await checkFeishuOAuth();
+        _authSkipped = false;
+        if (authorized) {
+          showSearchUI();
+        } else {
+          showAuthPrompt();
+        }
       }
     });
+
+    function showAuthPrompt() {
+      shareAuthPrompt.classList.remove('hidden');
+      shareSearchWrap.classList.add('hidden');
+      shareResults.innerHTML = '';
+      shareDialogTitle.innerHTML = '分享到飞书<span class="share-version-badge" id="shareVersionBadge">' + (_pendingShare?.vLabel || '') + '</span>';
+    }
+
+    function showSearchUI() {
+      shareAuthPrompt.classList.add('hidden');
+      shareSearchWrap.classList.remove('hidden');
+      if (!shareResults.innerHTML.trim()) {
+        shareResults.innerHTML = '<div class="share-result-empty">输入姓名搜索飞书联系人</div>';
+      }
+      shareDialogTitle.innerHTML = '分享到飞书<span class="share-version-badge" id="shareVersionBadge">' + (_pendingShare?.vLabel || '') + '</span>';
+      setTimeout(() => shareSearchInput.focus(), 100);
+    }
+
+    // 授权按钮
+    document.getElementById('shareAuthBtn').addEventListener('click', () => {
+      if (_pendingAuthUrl) {
+        // 保存当前状态到 sessionStorage，授权回调后恢复
+        sessionStorage.setItem('feishu_share_pending', '1');
+        window.location.href = _pendingAuthUrl;
+      } else {
+        // 降级：跳过授权直接搜索
+        _authSkipped = true;
+        showSearchUI();
+      }
+    });
+
+    // 跳过授权
+    document.getElementById('shareAuthSkip').addEventListener('click', () => {
+      _authSkipped = true;
+      showSearchUI();
+    });
+
+    // 页面加载时检查是否有 auth_ok 或 pending share 状态
+    (function initOAuthState() {
+      const params = new URLSearchParams(location.search);
+      if (params.get('auth_ok') === '1') {
+        _feishuAuthorized = true;
+        _feishuAuthChecked = true;
+        showToast('飞书授权成功，可以搜索联系人姓名了', 'success');
+        // 清除 URL 中的 auth_ok 参数
+        const url = new URL(location.href);
+        url.searchParams.delete('auth_ok');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, '', url.toString());
+        // 如果之前有待分享，重新打开分享弹窗
+        if (sessionStorage.getItem('feishu_share_pending') === '1') {
+          sessionStorage.removeItem('feishu_share_pending');
+          // 触发分享按钮
+          setTimeout(() => {
+            document.getElementById('feishuShareBtn').click();
+          }, 500);
+        }
+      }
+    })();
 
     // 搜索输入（防抖 300ms）
     shareSearchInput.addEventListener('input', () => {

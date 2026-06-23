@@ -34,6 +34,7 @@ const PrdForgeFeishu = (() => {
     const res = await fetch(apiBase + '/api/feishu/search-contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ query }),
     });
     if (!res.ok) {
@@ -48,6 +49,7 @@ const PrdForgeFeishu = (() => {
     const res = await fetch(apiBase + '/api/feishu/share-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         content,
         title,

@@ -22,6 +22,8 @@ async def send_md_file_to_user(
     content: str,
     title: str,
     version_label: str | None = None,
+    *,
+    user_access_token: str | None = None,
 ) -> SendResult:
     """将 MD 内容作为文件发送给指定飞书用户（OpenAPI）。"""
     safe_title = "".join(c for c in title if c.isalnum() or c in " _-()（）")
