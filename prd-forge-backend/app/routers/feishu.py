@@ -103,14 +103,30 @@ async def feishu_search_contacts(body: SearchContactsRequest) -> JSONResponse:
 async def feishu_debug_search(body: SearchContactsRequest) -> JSONResponse:
     """调试：返回飞书 API 原始响应 + 解析后的用户数据。"""
     from app.feishu import openapi as _oa
-    raw = await _oa._feishu_get(
+
+    # 1) contact/v3/users
+    raw1 = await _oa._feishu_get(
         "/contact/v3/users",
         params={"page_size": 3, "name": body.query},
     )
-    items = raw.get("data", {}).get("items", [])
+    items1 = raw1.get("data", {}).get("items", [])
+
+    # 2) contact/v3/users/find_by_department（搜索范围更大？）
+    raw2 = {}
+    try:
+        raw2 = await _oa._feishu_get(
+            "/contact/v3/users/find_by_department",
+            params={"page_size": 3, "department_id": "0", "name": body.query, "department_id_type": "department_id"},
+        )
+    except Exception as e:
+        raw2 = {"error": str(e)}
+
     return JSONResponse({
-        "raw_first_item": items[0] if items else None,
-        "raw_item_count": len(items),
+        "contact_v3_users": {
+            "first_item": items1[0] if items1 else None,
+            "count": len(items1),
+        },
+        "find_by_department": raw2,
     })
 
 
