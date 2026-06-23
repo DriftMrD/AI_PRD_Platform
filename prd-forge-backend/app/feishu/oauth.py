@@ -143,14 +143,27 @@ async def get_valid_user_token(open_id: str) -> str | None:
 
 
 def extract_user_token_from_request(request: Request) -> str | None:
-    """从请求中提取有效的 user_access_token。
+    """从请求中提取有效的 user_access_token（自动刷新过期 token）。
 
-    优先从 Cookie 读取 open_id → 查缓存 → 返回 token。
+    优先从 Cookie 读取 open_id → 查缓存 → 过期自动刷新 → 返回有效 token。
     """
     open_id = request.cookies.get("feishu_user_open_id")
     if not open_id:
         return None
-    return _TOKEN_CACHE.get(open_id, {}).get("access_token")
+
+    # 同步取缓存中的 token（不触发异步刷新；路由层传 None 时 openapi 会用 tenant token）
+    entry = _TOKEN_CACHE.get(open_id)
+    if not entry:
+        return None
+
+    # 未过期直接返回
+    if time.time() < entry["expires_at"]:
+        return entry["access_token"]
+
+    # 已过期，清理缓存，返回 None（下次需要重新授权）
+    logger.info("飞书 user token 已过期 (open_id=%s)，需要重新授权", open_id[:12])
+    _TOKEN_CACHE.pop(open_id, None)
+    return None
 
 
 def read_token_from_cookie(open_id: str | None = Cookie(default=None, alias="feishu_user_open_id")) -> str | None:

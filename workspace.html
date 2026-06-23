@@ -511,12 +511,6 @@
       font-family: var(--font-body); font-size: 13px; color: var(--ink-light);
       margin-bottom: 4px; line-height: 1.6;
     }
-    .share-auth-skip {
-      font-family: var(--font-body); font-size: 12px; color: var(--ink-faint);
-      cursor: pointer; margin-top: 10px; text-decoration: underline;
-      opacity: 0.6; transition: opacity 0.2s;
-    }
-    .share-auth-skip:hover { opacity: 1; }
     .share-search-wrap.hidden { display: none; }
     @media (max-width: 860px) {
       .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
@@ -616,7 +610,6 @@
         <div class="share-auth-icon">🔐</div>
         <div class="share-auth-text">需要授权飞书账号，才能搜索联系人姓名</div>
         <button class="sketch-btn" id="shareAuthBtn" style="margin-top:8px;background:var(--accent-orange);color:#fff;border-color:var(--accent-orange);">授权飞书</button>
-        <div class="share-auth-skip" id="shareAuthSkip">跳过授权，直接搜索（不显示姓名）</div>
       </div>
       <!-- 已授权 / 跳过授权 -->
       <div class="share-search-wrap" id="shareSearchWrap">
@@ -666,22 +659,29 @@
     let _shareSearchTimer = null;
     let _feishuAuthorized = false;       // 当前是否已授权
     let _feishuAuthChecked = false;      // 是否已尝试过检测
-    let _authSkipped = false;            // 用户选择跳过授权
 
-    // 检测飞书 OAuth 授权状态
+    // 检测飞书 OAuth 授权状态（始终请求后端验证，防止 token 缓存过期误判）
     async function checkFeishuOAuth() {
-      if (_feishuAuthChecked) return _feishuAuthorized;
       try {
         const res = await fetch(API_BASE + '/api/feishu/oauth/status', { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          _feishuAuthorized = !!data.authorized;
-          // 缓存 authorize_url 供授权按钮使用
-          if (!data.authorized && data.authorize_url) {
-            _pendingAuthUrl = data.authorize_url;
-          }
+        if (!res.ok) {
+          _feishuAuthorized = false;
+          showToast('后端连接失败，请稍后重试', 'error');
+          return false;
         }
-      } catch (e) { /* 网络错误，当作未授权处理 */ }
+        const data = await res.json();
+        _feishuAuthorized = !!data.authorized;
+        // 缓存 authorize_url 供授权按钮使用
+        if (!data.authorized && data.authorize_url) {
+          _pendingAuthUrl = data.authorize_url;
+        } else {
+          _pendingAuthUrl = null;
+        }
+      } catch (e) {
+        _feishuAuthorized = false;
+        showToast('网络异常，无法检测飞书授权状态', 'error');
+        return false;
+      }
       _feishuAuthChecked = true;
       return _feishuAuthorized;
     }
@@ -699,7 +699,6 @@
 
         // 检查授权状态
         const authorized = await checkFeishuOAuth();
-        _authSkipped = false;
         if (authorized) {
           showSearchUI();
         } else {
@@ -732,16 +731,20 @@
         sessionStorage.setItem('feishu_share_pending', '1');
         window.location.href = _pendingAuthUrl;
       } else {
-        // 降级：跳过授权直接搜索
-        _authSkipped = true;
-        showSearchUI();
+        // _pendingAuthUrl 为空：重新请求后端获取授权链接
+        showToast('正在获取授权链接…', 'success');
+        fetch(API_BASE + '/api/feishu/oauth/status', { credentials: 'include' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.authorize_url) {
+              sessionStorage.setItem('feishu_share_pending', '1');
+              window.location.href = data.authorize_url;
+            } else {
+              showToast('无法获取授权链接，请检查飞书应用配置', 'error');
+            }
+          })
+          .catch(() => showToast('网络异常，无法获取授权链接', 'error'));
       }
-    });
-
-    // 跳过授权
-    document.getElementById('shareAuthSkip').addEventListener('click', () => {
-      _authSkipped = true;
-      showSearchUI();
     });
 
     // 页面加载时检查是否有 auth_ok 或 pending share 状态
