@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     feishu_app_secret: str | None = Field(default=None, alias="FEISHU_APP_SECRET")
     # 飞书 OAuth 回调地址（授权后将 code 送回后端）
     feishu_oauth_redirect_uri: str | None = Field(default=None, alias="FEISHU_OAUTH_REDIRECT_URI")
+    # OAuth 完成后重定向回前端的地址（eg. https://xxx.github.io/AI_PRD_Platform/workspace.html）
+    feishu_oauth_frontend_url: str = Field(
+        default="https://driftmrd.github.io/AI_PRD_Platform/workspace.html",
+        alias="FEISHU_OAUTH_FRONTEND_URL",
+    )
 
     @property
     def feishu_enabled(self) -> bool:

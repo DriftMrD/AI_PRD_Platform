@@ -69,15 +69,17 @@ async def feishu_oauth_callback(
         logger.exception("OAuth token exchange failed: %s", exc)
         # 把错误信息编码到 URL，前端可解析展示
         import urllib.parse
+        frontend_url = get_settings().feishu_oauth_frontend_url
         err_msg = urllib.parse.quote(str(exc)[:200])
-        return RedirectResponse(url=f"/workspace.html?auth_error={err_msg}", status_code=302)
+        return RedirectResponse(url=f"{frontend_url}?auth_error={err_msg}", status_code=302)
 
     open_id = token_data.get("open_id", "")
     if open_id:
         store_token(open_id, token_data)
 
-    # 重定向回 workspace.html（不带 code 参数）
-    redirect_url = f"/workspace.html?auth_ok=1"
+    # 重定向回前端（从配置读取前端地址，不要走相对路径）
+    frontend_url = get_settings().feishu_oauth_frontend_url
+    redirect_url = f"{frontend_url}?auth_ok=1"
     if state:
         redirect_url += f"&state={state}"
 
