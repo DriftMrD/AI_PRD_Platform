@@ -29,6 +29,10 @@ COOKIE_ACCESS_TOKEN = "feishu_at"
 COOKIE_REFRESH_TOKEN = "feishu_rt"
 COOKIE_OPEN_ID = "feishu_oid"
 
+# Session token 机制：绕过浏览器跨站 Cookie 拦截（ITP）
+# OAuth 回调后生成随机 session token，前端存 sessionStorage 并通过 API body 回传
+_SESSION_STORE: dict[str, dict] = {}  # session_token → {access_token, refresh_token, expires_at}
+
 # 飞书 OAuth API
 _AUTH_BASE = "https://open.feishu.cn/open-apis"
 _TOKEN_URL = f"{_AUTH_BASE}/authen/v1/oidc/access_token"
@@ -147,6 +151,35 @@ async def _refresh_token(refresh_token: str) -> dict[str, Any] | None:
         return None
 
 
+# ---- Session Token（绕过跨站 Cookie 拦截） ----
+
+
+def create_session(token_data: dict) -> str:
+    """将 token 存入内存 session store，返回随机 session token。
+
+    前端收到后存 sessionStorage，后续 API 请求 body 带 feishu_session 即可。
+    """
+    expires_in = token_data.get("expires_in", 7200)
+    session_token = secrets.token_urlsafe(32)
+    _SESSION_STORE[session_token] = {
+        "access_token": token_data.get("access_token", ""),
+        "refresh_token": token_data.get("refresh_token", ""),
+        "expires_at": time.time() + expires_in - 60,
+    }
+    return session_token
+
+
+def get_token_by_session(session_token: str) -> str | None:
+    """通过 session token 获取有效的 access_token（过期返回 None）。"""
+    entry = _SESSION_STORE.get(session_token)
+    if not entry:
+        return None
+    if time.time() > entry["expires_at"]:
+        _SESSION_STORE.pop(session_token, None)
+        return None
+    return entry["access_token"]
+
+
 # ---- Cookie 读写 ----
 
 def _cookie_age(token_data: dict) -> int:
@@ -192,28 +225,36 @@ def store_token(open_id: str, token_data: dict) -> None:
     }
 
 
-def extract_user_token_from_request(request: Request) -> str | None:
+def extract_user_token_from_request(
+    request: Request,
+    session_token: str | None = None,
+) -> str | None:
     """从请求中提取 user_access_token。
 
-    优先级：内存缓存（快）→ Cookie（持久，跨越 Render 休眠）
+    优先级：session_token（前端传）→ Cookie（跨站可用时）→ 内存缓存。
+    新增 session_token 机制：浏览器 ITP 会拦截跨站 Cookie，但 session_token
+    由前端通过 API body 明文回传，完全绕开 Cookie 限制。
     """
-    open_id = request.cookies.get(COOKIE_OPEN_ID)
+    # 1. Session token（最高优先级，绕过跨站 Cookie 限制）
+    if session_token:
+        token = get_token_by_session(session_token)
+        if token:
+            return token
 
-    # 1. 先查内存缓存（实例热时最快）
+    # 2. Cookie 路径（用户已在 Render 同域授权时有效）
+    open_id = request.cookies.get(COOKIE_OPEN_ID)
     if open_id:
         entry = _TOKEN_CACHE.get(open_id)
         if entry and time.time() < entry["expires_at"]:
             return entry["access_token"]
 
-    # 2. 内存无有效缓存 → 从 Cookie 读 token（Render 冷启动仍可用）
     access_token = request.cookies.get(COOKIE_ACCESS_TOKEN)
     if access_token and open_id:
         refresh_token = request.cookies.get(COOKIE_REFRESH_TOKEN) or ""
-        # 回写到内存缓存（后续请求走快速路径）
         _TOKEN_CACHE[open_id] = {
             "access_token": access_token,
             "refresh_token": refresh_token,
-            "expires_at": time.time() + 3600,  # cookie 来的，保守估计 1 小时
+            "expires_at": time.time() + 3600,
         }
         return access_token
 

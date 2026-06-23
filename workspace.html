@@ -757,6 +757,12 @@
         _feishuAuthorized = true;
         _feishuAuthChecked = true;
 
+        // 读取 OAuth 回调带回的 session token（绕过跨站 Cookie 拦截）
+        const sessionToken = params.get('feishu_session');
+        if (sessionToken) {
+          sessionStorage.setItem('feishu_session', sessionToken);
+        }
+
         // 恢复之前分享时所在的对话 session 参数，让工作台回到那个对话页
         const pendingSessionId = sessionStorage.getItem('feishu_share_pending_session');
         const pendingShare = sessionStorage.getItem('feishu_share_pending') === '1';
@@ -764,6 +770,7 @@
         const url = new URL(location.href);
         url.searchParams.delete('auth_ok');
         url.searchParams.delete('state');
+        url.searchParams.delete('feishu_session');
         if (pendingSessionId) {
           url.searchParams.set('session', pendingSessionId);
         }

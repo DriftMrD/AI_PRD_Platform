@@ -16,6 +16,7 @@ from app.feishu.oauth import (
     exchange_code,
     extract_user_token_from_request,
     _set_token_cookies,
+    create_session,
 )
 from app.feishu.send_file import send_md_file_to_user
 from app.feishu.share_store import consume, create
@@ -34,6 +35,7 @@ class SharePayloadCreate(BaseModel):
 
 class SearchContactsRequest(BaseModel):
     query: str = Field(min_length=1, max_length=50, description="搜索联系人姓名")
+    feishu_session: str | None = Field(default=None, description="OAuth session token（绕过跨站 Cookie）")
 
 
 class ShareFileRequest(BaseModel):
@@ -41,6 +43,7 @@ class ShareFileRequest(BaseModel):
     title: str = Field(default="PRD 文档", max_length=200, description="文件标题（不含扩展名）")
     version_label: str | None = Field(default=None, max_length=20, description="版本号如 v3")
     recipient_open_id: str = Field(..., description="收件人飞书 open_id")
+    feishu_session: str | None = Field(default=None, description="OAuth session token（绕过跨站 Cookie）")
 
 
 # --------------- OAuth 授权 ---------------
@@ -73,14 +76,15 @@ async def feishu_oauth_callback(
         err_msg = urllib.parse.quote(str(exc)[:200])
         return RedirectResponse(url=f"{frontend_url}?auth_error={err_msg}", status_code=302)
 
-    # 重定向回前端（从配置读取前端地址，不要走相对路径）
+    # 重定向回前端，携带 session token（绕过跨站 Cookie 拦截）
+    session_token = create_session(token_data)
     frontend_url = get_settings().feishu_oauth_frontend_url
-    redirect_url = f"{frontend_url}?auth_ok=1"
+    redirect_url = f"{frontend_url}?auth_ok=1&feishu_session={session_token}"
     if state:
         redirect_url += f"&state={state}"
 
     response = RedirectResponse(url=redirect_url, status_code=302)
-    _set_token_cookies(response, token_data)  # token 存 cookie（持久化）+ 内存缓存
+    _set_token_cookies(response, token_data)  # cookie 保底（同域时有效）
     return response
 
 
@@ -139,8 +143,8 @@ async def feishu_jssdk_config(
 
 @router.post("/feishu/search-contacts")
 async def feishu_search_contacts(body: SearchContactsRequest, request: Request) -> JSONResponse:
-    """按姓名搜索飞书联系人（有 user token 则返回真实姓名）。"""
-    user_token = extract_user_token_from_request(request)
+    """按姓名搜索飞书联系人（优先用户身份 token，可拿到真实姓名）。"""
+    user_token = extract_user_token_from_request(request, session_token=body.feishu_session)
     result = await search_contacts(body.query, user_access_token=user_token)
     if not result.ok:
         raise HTTPException(status_code=502, detail=result.error_message or "搜索失败")

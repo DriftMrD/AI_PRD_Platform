@@ -31,11 +31,12 @@ const PrdForgeFeishu = (() => {
 
   /* ---------- 桌面浏览器：搜索联系人 ---------- */
   async function searchContacts(apiBase, query) {
+    const sessionToken = sessionStorage.getItem('feishu_session') || null;
     const res = await fetch(apiBase + '/api/feishu/search-contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, feishu_session: sessionToken }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -46,6 +47,7 @@ const PrdForgeFeishu = (() => {
 
   /* ---------- 桌面浏览器：发送 MD 文件 ---------- */
   async function sendFileViaCli(apiBase, content, title, versionLabel, openId) {
+    const sessionToken = sessionStorage.getItem('feishu_session') || null;
     const res = await fetch(apiBase + '/api/feishu/share-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,6 +57,7 @@ const PrdForgeFeishu = (() => {
         title,
         version_label: versionLabel,
         recipient_open_id: openId,
+        feishu_session: sessionToken,
       }),
     });
     if (!res.ok) {
