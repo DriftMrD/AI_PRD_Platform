@@ -85,12 +85,13 @@ async def feishu_oauth_callback(
 
     response = RedirectResponse(url=redirect_url, status_code=302)
     # 写 httpOnly cookie 存 open_id（token 本身存服务端缓存）
+    # SameSite=None + Secure：允许跨站 POST（前端 GitHub Pages → 后端 Render API）
     response.set_cookie(
         key="feishu_user_open_id",
         value=open_id,
         httponly=True,
-        secure=False,  # Render 支持 HTTPS，但开发环境可能 HTTP
-        samesite="lax",
+        secure=True,
+        samesite="none",
         max_age=7200,
     )
     return response
