@@ -103,6 +103,20 @@ class Settings(BaseSettings):
             and self.langfuse_secret_key.strip()
         )
 
+    # 飞书 H5 JSAPI（可选；配齐 app id + secret 后启用分享选人）
+    feishu_app_id: str | None = Field(default=None, alias="FEISHU_APP_ID")
+    feishu_app_secret: str | None = Field(default=None, alias="FEISHU_APP_SECRET")
+
+    @property
+    def feishu_enabled(self) -> bool:
+        """是否启用飞书 H5 JSAPI 鉴权。"""
+        return bool(
+            self.feishu_app_id
+            and self.feishu_app_id.strip()
+            and self.feishu_app_secret
+            and self.feishu_app_secret.strip()
+        )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

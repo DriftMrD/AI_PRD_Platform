@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.errors import AppError, INTERNAL
 from app.prompts.skill_loader import preload as preload_skill_and_template
 from app.prompts.skill_loader import prompt_source
+from app.routers.feishu import router as feishu_router
 from app.routers.generate import router as generate_router
 
 logging.basicConfig(
@@ -56,6 +57,7 @@ app.add_middleware(
 
 # 路由
 app.include_router(generate_router, prefix="/api")
+app.include_router(feishu_router, prefix="/api")
 
 
 # ===== 全局异常 handler =====
