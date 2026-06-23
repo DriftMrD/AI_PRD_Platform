@@ -1,14 +1,20 @@
-"""飞书发送 MD 文件服务。"""
+"""飞书发送 MD 文件服务（OpenAPI 直连）。"""
 
 from __future__ import annotations
 
 import logging
-import os
-import shutil
+from dataclasses import dataclass
 
-from app.feishu.cli import CliResult, make_temp_md_file, run_lark
+from app.feishu import openapi
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SendResult:
+    ok: bool
+    data: dict
+    error_message: str | None = None
 
 
 async def send_md_file_to_user(
@@ -16,35 +22,24 @@ async def send_md_file_to_user(
     content: str,
     title: str,
     version_label: str | None = None,
-) -> CliResult:
-    """将 MD 内容作为文件发送给指定飞书用户。"""
-    # 生成安全的文件名
+) -> SendResult:
+    """将 MD 内容作为文件发送给指定飞书用户（OpenAPI）。"""
     safe_title = "".join(c for c in title if c.isalnum() or c in " _-()（）")
     if not safe_title.strip():
         safe_title = "PRD"
-    if version_label:
-        filename = f"{safe_title}_{version_label}.md"
-    else:
-        filename = f"{safe_title}.md"
-
-    tmpdir, fname = make_temp_md_file(content, filename)
+    filename = f"{safe_title}_{version_label}.md" if version_label else f"{safe_title}.md"
 
     try:
-        # 从临时目录执行，因为 lark-cli --file 需要相对路径
-        result = run_lark(
-            [
-                "im", "+messages-send",
-                "--user-id", user_open_id,
-                "--file", f"./{fname}",
-                "--as", "user",
-            ],
-            cwd=tmpdir,
-            timeout=30,
-        )
-        return result
-    finally:
-        # 清理临时文件
-        try:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        except Exception:
-            pass
+        # 1. 上传文件到飞书 IM
+        file_info = await openapi.upload_file(content, filename)
+        file_key = file_info.get("file_key")
+        if not file_key:
+            return SendResult(ok=False, data={}, error_message="飞书文件上传失败：未返回 file_key")
+
+        # 2. 发送文件消息
+        msg_info = await openapi.send_file_message(user_open_id, file_key)
+        return SendResult(ok=True, data={"message_id": msg_info.get("data", {}).get("message_id", "")})
+    except Exception as exc:
+        msg = str(exc)
+        logger.warning("飞书发送文件失败: %s", msg)
+        return SendResult(ok=False, data={}, error_message=msg)
