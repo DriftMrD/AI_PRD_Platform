@@ -62,22 +62,47 @@ def build_authorize_url(state: str | None = None) -> str:
     return f"{_AUTH_BASE}/authen/v1/authorize?{qs}"
 
 
+async def _get_app_access_token() -> str:
+    """获取 app_access_token（用于 OIDC token 交换、user_info 等应用级操作）。"""
+    settings = get_settings()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            f"{_AUTH_BASE}/auth/v3/app_access_token/internal",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            json={
+                "app_id": settings.feishu_app_id,
+                "app_secret": settings.feishu_app_secret,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    if data.get("code") != 0:
+        raise RuntimeError(f"飞书 app_access_token 失败: {data.get('msg', data)}")
+    return str(data["app_access_token"])
+
+
 async def exchange_code(code: str) -> dict[str, Any]:
     """用授权码换取 user_access_token。
+
+    飞书 OIDC 2.0 需要 app_access_token 做 Bearer 认证，
+    不能直接在 body 里传 app_id/app_secret。
 
     Returns:
         {"access_token": str, "refresh_token": str, "expires_in": int, "open_id": str, "name": str}
     """
-    settings = get_settings()
+    app_token = await _get_app_access_token()
+    redirect_uri = _get_redirect_uri()
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             _TOKEN_URL,
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers={
+                "Authorization": f"Bearer {app_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
             json={
                 "grant_type": "authorization_code",
                 "code": code,
-                "app_id": settings.feishu_app_id,
-                "app_secret": settings.feishu_app_secret,
+                "redirect_uri": redirect_uri,
             },
         )
         resp.raise_for_status()

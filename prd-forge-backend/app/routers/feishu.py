@@ -67,7 +67,10 @@ async def feishu_oauth_callback(
         token_data = await exchange_code(code)
     except Exception as exc:
         logger.exception("OAuth token exchange failed: %s", exc)
-        return RedirectResponse(url="/?auth_error=1", status_code=302)
+        # 把错误信息编码到 URL，前端可解析展示
+        import urllib.parse
+        err_msg = urllib.parse.quote(str(exc)[:200])
+        return RedirectResponse(url=f"/workspace.html?auth_error={err_msg}", status_code=302)
 
     open_id = token_data.get("open_id", "")
     if open_id:

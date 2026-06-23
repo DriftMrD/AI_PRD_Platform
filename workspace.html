@@ -747,7 +747,7 @@
       }
     });
 
-    // 页面加载时检查是否有 auth_ok 或 pending share 状态
+    // 页面加载时检查是否有 auth_ok、auth_error 或 pending share 状态
     (function initOAuthState() {
       const params = new URLSearchParams(location.search);
       if (params.get('auth_ok') === '1') {
@@ -767,6 +767,17 @@
             document.getElementById('feishuShareBtn').click();
           }, 500);
         }
+      }
+      if (params.has('auth_error')) {
+        const errMsg = decodeURIComponent(params.get('auth_error') || '未知错误');
+        showToast('飞书授权失败：' + errMsg, 'error');
+        // 清除 URL 参数
+        const url = new URL(location.href);
+        url.searchParams.delete('auth_error');
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, '', url.toString());
+        sessionStorage.removeItem('feishu_share_pending');
       }
     })();
 
