@@ -9,6 +9,10 @@ Token 存储策略：
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json as _json
 import logging
 import secrets
 import time
@@ -30,8 +34,9 @@ COOKIE_REFRESH_TOKEN = "feishu_rt"
 COOKIE_OPEN_ID = "feishu_oid"
 
 # Session token 机制：绕过浏览器跨站 Cookie 拦截（ITP）
-# OAuth 回调后生成随机 session token，前端存 sessionStorage 并通过 API body 回传
-_SESSION_STORE: dict[str, dict] = {}  # session_token → {access_token, refresh_token, expires_at}
+# OAuth 回调后生成 HMAC 签名的自包含 session token，前端存 sessionStorage 并通过 API body 回传。
+# token 数据直接嵌入 session token 中，Render 重启不丢（不再依赖内存 _SESSION_STORE）。
+_SESSION_STORE: dict[str, dict] = {}  # session_token → {access_token, refresh_token, expires_at}（已废弃，保留兼容）
 
 # 飞书 OAuth API
 _AUTH_BASE = "https://open.feishu.cn/open-apis"
@@ -151,33 +156,84 @@ async def _refresh_token(refresh_token: str) -> dict[str, Any] | None:
         return None
 
 
-# ---- Session Token（绕过跨站 Cookie 拦截） ----
+# ---- Session Token（自包含，绕过跨站 Cookie + Render 重启） ----
+
+
+def _signing_key() -> bytes:
+    """派生 HMAC 签名密钥（基于 app_secret，不硬编码）。"""
+    settings = get_settings()
+    return hashlib.sha256(
+        (settings.feishu_app_secret or "prd-forge-default").encode()
+    ).digest()
 
 
 def create_session(token_data: dict) -> str:
-    """将 token 存入内存 session store，返回随机 session token。
+    """将 token 编码为 HMAC 签名的自包含 session token。
 
-    前端收到后存 sessionStorage，后续 API 请求 body 带 feishu_session 即可。
+    数据直接嵌在 token 内（base64），不依赖内存存储，Render 重启不丢。
+    格式：base64(payload).hex_signature(32)
     """
-    expires_in = token_data.get("expires_in", 7200)
-    session_token = secrets.token_urlsafe(32)
+    payload = _json.dumps({
+        "at": token_data.get("access_token", ""),
+        "rt": token_data.get("refresh_token", ""),
+        "exp": int(time.time() + token_data.get("expires_in", 7200) - 60),
+    }).encode()
+
+    encoded = base64.urlsafe_b64encode(payload).decode()
+    sig = hmac.new(_signing_key(), encoded.encode(), hashlib.sha256).hexdigest()[:32]
+    session_token = f"{encoded}.{sig}"
+
+    # 同时写内存 store（兼容旧逻辑 + Render 热缓存加速）
     _SESSION_STORE[session_token] = {
         "access_token": token_data.get("access_token", ""),
         "refresh_token": token_data.get("refresh_token", ""),
-        "expires_at": time.time() + expires_in - 60,
+        "expires_at": time.time() + token_data.get("expires_in", 7200) - 60,
     }
     return session_token
 
 
 def get_token_by_session(session_token: str) -> str | None:
-    """通过 session token 获取有效的 access_token（过期返回 None）。"""
+    """通过 session token 获取 access_token。
+
+    优先查内存 store（快），miss 则从自包含 payload 解码（跨 Render 重启）。
+    HMAC 签名验证防篡改。
+    """
+    # 1. 内存 store（Render 实例热时最快）
     entry = _SESSION_STORE.get(session_token)
-    if not entry:
+    if entry and time.time() < entry["expires_at"]:
+        return entry["access_token"]
+
+    # 2. 自包含 payload（Render 重启后仍可用）
+    try:
+        parts = session_token.rsplit(".", 1)
+        if len(parts) != 2:
+            return None
+        encoded, sig = parts
+
+        # HMAC 签名验证
+        expected_sig = hmac.new(_signing_key(), encoded.encode(), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, expected_sig):
+            logger.warning("飞书 session token 签名验证失败（可能被篡改）")
+            return None
+
+        payload = base64.urlsafe_b64decode(encoded.encode())
+        data = _json.loads(payload)
+        if time.time() > data.get("exp", 0):
+            return None  # 已过期
+
+        at = data.get("at", "")
+        if not at:
+            return None
+
+        # 回写内存（后续请求走快速路径）
+        _SESSION_STORE[session_token] = {
+            "access_token": at,
+            "refresh_token": data.get("rt", ""),
+            "expires_at": data.get("exp", 0),
+        }
+        return at
+    except Exception:
         return None
-    if time.time() > entry["expires_at"]:
-        _SESSION_STORE.pop(session_token, None)
-        return None
-    return entry["access_token"]
 
 
 # ---- Cookie 读写 ----
