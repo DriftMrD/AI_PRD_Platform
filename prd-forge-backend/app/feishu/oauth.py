@@ -9,6 +9,7 @@ import logging
 import secrets
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from fastapi import Cookie, HTTPException, Request
@@ -57,7 +58,7 @@ def build_authorize_url(state: str | None = None) -> str:
         "state": state,
         "scope": "contact:user.base:readonly",  # 获取用户基本信息（姓名、邮箱等）
     }
-    qs = "&".join(f"{k}={httpx.URL('')._encode_param(v)}" for k, v in params.items())
+    qs = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     return f"{_AUTH_BASE}/authen/v1/authorize?{qs}"
 
 
