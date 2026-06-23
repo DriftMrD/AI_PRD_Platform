@@ -1,5 +1,9 @@
 """飞书 OAuth 2.0 用户授权：获取 user_access_token，用于以用户身份调用 API。
 
+Token 存储策略：
+- 内存缓存 _TOKEN_CACHE（快速路径，Render 休眠后会丢失）
+- httpOnly Cookie（持久化路径，Render 重启后仍可用）
+
 通过用户身份调 API 可拿到联系人姓名、邮箱、部门等字段（应用身份只能拿 open_id）。
 """
 
@@ -12,21 +16,26 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
-from fastapi import Cookie, HTTPException, Request
+from fastapi import Cookie, Request
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_CACHE: dict[str, dict] = {}  # open_id → {token, expires_at, refresh_token}
+_TOKEN_CACHE: dict[str, dict] = {}  # open_id → {token, expires_at, refresh_token}（内存加速）
 
-# cookie 名
-FEISHU_USER_TOKEN_COOKIE = "feishu_user_token"
+# Cookie 名（存 token 本身，不依赖内存缓存）
+COOKIE_ACCESS_TOKEN = "feishu_at"
+COOKIE_REFRESH_TOKEN = "feishu_rt"
+COOKIE_OPEN_ID = "feishu_oid"
 
 # 飞书 OAuth API
 _AUTH_BASE = "https://open.feishu.cn/open-apis"
 _TOKEN_URL = f"{_AUTH_BASE}/authen/v1/oidc/access_token"
 _USER_INFO_URL = f"{_AUTH_BASE}/authen/v1/user_info"
+
+# Cookie 基础参数（跨站可携带，https 强制）
+_COOKIE_BASE = {"httponly": True, "secure": True, "samesite": "none"}
 
 
 def _get_redirect_uri() -> str:
@@ -138,8 +147,43 @@ async def _refresh_token(refresh_token: str) -> dict[str, Any] | None:
         return None
 
 
+# ---- Cookie 读写 ----
+
+def _cookie_age(token_data: dict) -> int:
+    """根据 token expires_in 计算 cookie max_age（秒），至少 3600。"""
+    return max(3600, token_data.get("expires_in", 7200))
+
+
+def _set_token_cookies(response: "RedirectResponse | JSONResponse", token_data: dict) -> None:
+    """在 response 上同时写入 token cookies + 内存缓存。"""
+    access_token = token_data.get("access_token", "")
+    refresh_token = token_data.get("refresh_token", "")
+    open_id = token_data.get("open_id", "")
+    if not access_token or not open_id:
+        return
+
+    age = _cookie_age(token_data)
+    kwargs = {**_COOKIE_BASE, "max_age": age}
+
+    if access_token:
+        response.set_cookie(key=COOKIE_ACCESS_TOKEN, value=access_token, **kwargs)
+    if refresh_token:
+        response.set_cookie(key=COOKIE_REFRESH_TOKEN, value=refresh_token, **kwargs)
+    if open_id:
+        response.set_cookie(key=COOKIE_OPEN_ID, value=open_id, **kwargs)
+
+    # 清理旧版 cookie（v1 用 feishu_user_open_id 存 open_id，现已改为 feishu_oid）
+    response.delete_cookie(key="feishu_user_open_id", path="/", **{k: v for k, v in _COOKIE_BASE.items() if k != "max_age"})
+
+    # 同时写内存缓存加速后续请求
+    store_token(open_id, token_data)
+
+
 def store_token(open_id: str, token_data: dict) -> None:
-    """缓存 user_access_token。"""
+    """缓存 user_access_token 到内存（加速）。
+
+    持久化 token 由 cookie 负责，此函数仅写入内存。
+    """
     _TOKEN_CACHE[open_id] = {
         "access_token": token_data.get("access_token", ""),
         "refresh_token": token_data.get("refresh_token", ""),
@@ -148,52 +192,29 @@ def store_token(open_id: str, token_data: dict) -> None:
     }
 
 
-async def get_valid_user_token(open_id: str) -> str | None:
-    """获取有效的 user_access_token，过期则刷新。"""
-    entry = _TOKEN_CACHE.get(open_id)
-    if not entry:
-        return None
-
-    if time.time() < entry["expires_at"]:
-        return entry["access_token"]
-
-    # token 过期，尝试刷新
-    refreshed = await _refresh_token(entry["refresh_token"])
-    if refreshed:
-        store_token(open_id, refreshed)
-        return refreshed.get("access_token")
-
-    # 刷新失败，删除过期缓存
-    _TOKEN_CACHE.pop(open_id, None)
-    return None
-
-
 def extract_user_token_from_request(request: Request) -> str | None:
-    """从请求中提取有效的 user_access_token（自动刷新过期 token）。
+    """从请求中提取 user_access_token。
 
-    优先从 Cookie 读取 open_id → 查缓存 → 过期自动刷新 → 返回有效 token。
+    优先级：内存缓存（快）→ Cookie（持久，跨越 Render 休眠）
     """
-    open_id = request.cookies.get("feishu_user_open_id")
-    if not open_id:
-        return None
+    open_id = request.cookies.get(COOKIE_OPEN_ID)
 
-    # 同步取缓存中的 token（不触发异步刷新；路由层传 None 时 openapi 会用 tenant token）
-    entry = _TOKEN_CACHE.get(open_id)
-    if not entry:
-        return None
+    # 1. 先查内存缓存（实例热时最快）
+    if open_id:
+        entry = _TOKEN_CACHE.get(open_id)
+        if entry and time.time() < entry["expires_at"]:
+            return entry["access_token"]
 
-    # 未过期直接返回
-    if time.time() < entry["expires_at"]:
-        return entry["access_token"]
+    # 2. 内存无有效缓存 → 从 Cookie 读 token（Render 冷启动仍可用）
+    access_token = request.cookies.get(COOKIE_ACCESS_TOKEN)
+    if access_token and open_id:
+        refresh_token = request.cookies.get(COOKIE_REFRESH_TOKEN) or ""
+        # 回写到内存缓存（后续请求走快速路径）
+        _TOKEN_CACHE[open_id] = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": time.time() + 3600,  # cookie 来的，保守估计 1 小时
+        }
+        return access_token
 
-    # 已过期，清理缓存，返回 None（下次需要重新授权）
-    logger.info("飞书 user token 已过期 (open_id=%s)，需要重新授权", open_id[:12])
-    _TOKEN_CACHE.pop(open_id, None)
     return None
-
-
-def read_token_from_cookie(open_id: str | None = Cookie(default=None, alias="feishu_user_open_id")) -> str | None:
-    """FastAPI 依赖：从 Cookie 读取 user_access_token（仅返回，不校验过期）。"""
-    if not open_id:
-        return None
-    return _TOKEN_CACHE.get(open_id, {}).get("access_token")

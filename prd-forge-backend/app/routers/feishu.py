@@ -15,7 +15,7 @@ from app.feishu.oauth import (
     build_authorize_url,
     exchange_code,
     extract_user_token_from_request,
-    store_token,
+    _set_token_cookies,
 )
 from app.feishu.send_file import send_md_file_to_user
 from app.feishu.share_store import consume, create
@@ -73,10 +73,6 @@ async def feishu_oauth_callback(
         err_msg = urllib.parse.quote(str(exc)[:200])
         return RedirectResponse(url=f"{frontend_url}?auth_error={err_msg}", status_code=302)
 
-    open_id = token_data.get("open_id", "")
-    if open_id:
-        store_token(open_id, token_data)
-
     # 重定向回前端（从配置读取前端地址，不要走相对路径）
     frontend_url = get_settings().feishu_oauth_frontend_url
     redirect_url = f"{frontend_url}?auth_ok=1"
@@ -84,16 +80,7 @@ async def feishu_oauth_callback(
         redirect_url += f"&state={state}"
 
     response = RedirectResponse(url=redirect_url, status_code=302)
-    # 写 httpOnly cookie 存 open_id（token 本身存服务端缓存）
-    # SameSite=None + Secure：允许跨站 POST（前端 GitHub Pages → 后端 Render API）
-    response.set_cookie(
-        key="feishu_user_open_id",
-        value=open_id,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=7200,
-    )
+    _set_token_cookies(response, token_data)  # token 存 cookie（持久化）+ 内存缓存
     return response
 
 
