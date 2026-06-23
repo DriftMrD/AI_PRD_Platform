@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRD Forge - 分享到飞书</title>
+  <style>
+    body {
+      margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+      font-family: 'Noto Sans SC', system-ui, sans-serif; background: #f5edd6; color: #2c1a0e;
+    }
+    .box {
+      max-width: 360px; padding: 28px 24px; text-align: center;
+      background: #faf4e4; border: 2px solid #c8a97a; border-radius: 4px;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
+    p { margin: 0; font-size: 14px; line-height: 1.6; color: #5c3d1e; }
+    p.error { color: #a33; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>分享到飞书</h1>
+    <p id="status">正在准备发送…</p>
+  </div>
+  <script src="js/feishu-share.js?v=3"></script>
+  <script>
+    const DEFAULT_API_BASE = 'https://prd-forge-backend.onrender.com';
+
+    function getApiBase() {
+      const q = new URLSearchParams(location.search).get('api');
+      if (q) return q.replace(/\/+$/, '');
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+      }
+      return DEFAULT_API_BASE;
+    }
+
+    function showStatus(msg, isError) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = isError ? 'error' : '';
+    }
+
+    (async function () {
+      if (!PrdForgeFeishu.isFeishuEnv()) {
+        showStatus('请在飞书 / 传神客户端内完成分享', true);
+        return;
+      }
+      const ok = await PrdForgeFeishu.runRelayShare(getApiBase(), showStatus);
+      if (!ok) {
+        showStatus('没有待分享内容，请返回工作台重新点击分享', true);
+      }
+    })();
+  </script>
+</body>
+</html>

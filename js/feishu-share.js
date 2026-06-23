@@ -7,6 +7,7 @@ const PrdForgeFeishu = (() => {
   const PENDING_KEY = 'prd_feishu_share_pending';
   const TEXT_KEY = 'prd_feishu_share_text';
   const TITLE_KEY = 'prd_feishu_share_title';
+  const RELAY_PAGE = 'feishu-share.html';
   /** 飞书卡片 Markdown 有长度上限，超出则截断 */
   const MAX_CARD_CHARS = 12000;
 
@@ -14,9 +15,11 @@ const PrdForgeFeishu = (() => {
   let sdkInitPromise = null;
 
   function isFeishuEnv() {
+    const ua = navigator.userAgent || '';
     return (
-      /Lark|Feishu/i.test(navigator.userAgent) ||
-      typeof window.tt !== 'undefined'
+      /Lark|Feishu|Chuanshen|传神/i.test(ua) ||
+      typeof window.tt !== 'undefined' ||
+      typeof window.h5sdk !== 'undefined'
     );
   }
 
@@ -102,10 +105,17 @@ const PrdForgeFeishu = (() => {
     };
   }
 
-  function openInFeishuWebview(shareIntent) {
-    const url = new URL(location.href);
-    if (shareIntent) url.searchParams.set('feishu_share', '1');
-    const target = url.href.split('#')[0];
+  /** 外部浏览器：打开无需登录的分享中转页，避免飞书内跳到登录页 */
+  function buildShareRelayUrl() {
+    const url = new URL(RELAY_PAGE, location.href);
+    const api = new URLSearchParams(location.search).get('api');
+    if (api) url.searchParams.set('api', api);
+    url.searchParams.set('feishu_share', '1');
+    return url.href.split('#')[0];
+  }
+
+  function openInFeishuWebview() {
+    const target = buildShareRelayUrl();
     const applink =
       'https://applink.feishu.cn/client/web_url/open?mode=window&url=' +
       encodeURIComponent(target);
@@ -186,8 +196,8 @@ const PrdForgeFeishu = (() => {
     }
 
     stashPendingShare(shareText, title);
-    onToast('正在飞书内打开，选人后即可发送…', 'success');
-    openInFeishuWebview(true);
+    onToast('正在飞书内打开选人…', 'success');
+    openInFeishuWebview();
   }
 
   async function share(apiBase, shareText, meta, onToast) {
@@ -196,30 +206,36 @@ const PrdForgeFeishu = (() => {
     await shareWithCard(apiBase, shareText, title, vLabel, onToast);
   }
 
-  async function maybeAutoShare(apiBase, onToast) {
+  /** feishu-share.html 中转页：读取待发送内容并唤起选人 */
+  async function runRelayShare(apiBase, onStatus) {
     const params = new URLSearchParams(location.search);
-    if (params.get('feishu_share') !== '1') return;
-
-    params.delete('feishu_share');
-    const clean =
-      location.pathname + (params.toString() ? '?' + params.toString() : '');
-    history.replaceState(null, '', clean);
+    if (params.get('feishu_share') !== '1') return false;
 
     const pending = readPendingShare();
-    if (!pending) return;
+    if (!pending) return false;
+
+    onStatus('正在连接飞书…');
 
     const ready = await ensureSdk(apiBase);
     if (ready) {
-      sendShareCard(pending.text, pending.title, pending.title, onToast);
-      return;
+      onStatus('请选择要发送的联系人…');
+      sendShareCard(pending.text, pending.title, pending.title, onStatus);
+      return true;
     }
+
     try {
       await navigator.clipboard.writeText(pending.text);
-      onToast('飞书未就绪，已复制到剪贴板，请手动发送', 'success');
+      onStatus('飞书应用未配置，内容已复制到剪贴板，请手动发送', true);
     } catch {
-      onToast('飞书未就绪，请重新点击分享', 'error');
+      onStatus('飞书未就绪，请返回工作台重试', true);
     }
+    return true;
   }
 
-  return { share, maybeAutoShare, isFeishuEnv };
+  async function maybeAutoShare(apiBase, onToast) {
+    if (!location.pathname.endsWith(RELAY_PAGE)) return;
+    await runRelayShare(apiBase, onToast);
+  }
+
+  return { share, maybeAutoShare, runRelayShare, isFeishuEnv };
 })();
