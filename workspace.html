@@ -516,7 +516,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="js/prd-versions.js?v=3"></script>
-  <script src="js/feishu-share.js?v=1"></script>
+  <script src="js/feishu-share.js?v=2"></script>
   <script src="js/supabase-client.js?v=2"></script>
   <script>
     const PENDING_KEY = 'prd_forge_pending';
@@ -1559,8 +1559,9 @@
         return;
       }
       const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
-      const shareText = '【' + (s?.title || 'PRD 文档') + ' · ' + vLabel + '】\n\n' + text;
-      PrdForgeFeishu.share(API_BASE, shareText, vLabel, showToast);
+      const title = (s?.title || 'PRD 文档') + ' · ' + vLabel;
+      const shareText = '【' + title + '】\n\n' + text;
+      PrdForgeFeishu.share(API_BASE, shareText, { title, vLabel }, showToast);
     });
 
     document.querySelectorAll('.mode-tab').forEach(tab => {

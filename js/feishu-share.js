@@ -1,10 +1,14 @@
 /**
- * 飞书 / 传神分享：飞书内 chooseChat 选人；外部浏览器先复制再打开飞书内页面。
+ * 飞书 / 传神分享：选人后直接发送 Markdown 消息卡片（无需粘贴）。
  */
 const PrdForgeFeishu = (() => {
   const SDK_URL =
     'https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk/h5-js-sdk-1.5.23.js';
   const PENDING_KEY = 'prd_feishu_share_pending';
+  const TEXT_KEY = 'prd_feishu_share_text';
+  const TITLE_KEY = 'prd_feishu_share_title';
+  /** 飞书卡片 Markdown 有长度上限，超出则截断 */
+  const MAX_CARD_CHARS = 12000;
 
   let sdkReady = false;
   let sdkInitPromise = null;
@@ -64,7 +68,7 @@ const PrdForgeFeishu = (() => {
           timestamp: cfg.timestamp,
           nonceStr: cfg.nonceStr,
           signature: cfg.signature,
-          jsApiList: ['chooseChat', 'setClipboardData'],
+          jsApiList: ['sendMessageCard', 'setClipboardData'],
           onSuccess: () => {
             sdkReady = true;
             resolve(true);
@@ -75,6 +79,27 @@ const PrdForgeFeishu = (() => {
     })();
 
     return sdkInitPromise;
+  }
+
+  function buildCardContent(title, markdown) {
+    let body = markdown;
+    if (body.length > MAX_CARD_CHARS) {
+      body =
+        body.slice(0, MAX_CARD_CHARS) +
+        '\n\n…（内容过长已截断，请在工作台查看完整版）';
+    }
+    return {
+      msg_type: 'interactive',
+      card: {
+        schema: '2.0',
+        header: {
+          title: { tag: 'plain_text', content: title },
+        },
+        body: {
+          elements: [{ tag: 'markdown', content: body }],
+        },
+      },
+    };
   }
 
   function openInFeishuWebview(shareIntent) {
@@ -93,20 +118,43 @@ const PrdForgeFeishu = (() => {
     a.remove();
   }
 
-  function chooseChat(vLabel, onToast) {
+  function stashPendingShare(shareText, title) {
+    localStorage.setItem(PENDING_KEY, '1');
+    localStorage.setItem(TEXT_KEY, shareText);
+    localStorage.setItem(TITLE_KEY, title);
+  }
+
+  function readPendingShare() {
+    if (localStorage.getItem(PENDING_KEY) !== '1') return null;
+    const text = localStorage.getItem(TEXT_KEY);
+    const title = localStorage.getItem(TITLE_KEY);
+    localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(TEXT_KEY);
+    localStorage.removeItem(TITLE_KEY);
+    if (!text) return null;
+    return { text, title: title || 'PRD 文档' };
+  }
+
+  function sendShareCard(shareText, title, vLabel, onToast) {
+    const cardContent = buildCardContent(title, shareText);
     const run = () => {
-      window.tt.chooseChat({
-        allowCreateGroup: false,
-        multiSelect: false,
-        selectType: 2,
-        confirmTitle: '分享给',
-        confirmDesc:
-          '内容已复制到剪贴板，可在留言框粘贴（Ctrl+V / ⌘V）后发送',
-        showMessageInput: true,
-        externalChat: true,
-        success: () => onToast('已复制 ' + vLabel, 'success'),
-        fail: () =>
-          onToast('选人失败，请手动新建消息并粘贴', 'error'),
+      window.tt.sendMessageCard({
+        shouldChooseChat: true,
+        chooseChatParams: {
+          allowCreateGroup: false,
+          multiSelect: false,
+          selectType: 2,
+          confirmTitle: '发送 PRD',
+          confirmDesc: '确认发送给所选联系人？',
+          externalChat: true,
+        },
+        cardContent,
+        success: () => onToast('已发送 ' + vLabel, 'success'),
+        fail: (res) => {
+          const msg =
+            (res && (res.errMsg || res.errString)) || '发送失败，请重试';
+          onToast(msg, 'error');
+        },
       });
     };
 
@@ -117,51 +165,60 @@ const PrdForgeFeishu = (() => {
     }
   }
 
-  async function share(apiBase, shareText, vLabel, onToast) {
-    try {
-      await navigator.clipboard.writeText(shareText);
-    } catch {
-      onToast('复制失败，请手动复制', 'error');
-      return;
-    }
-
+  async function shareWithCard(apiBase, shareText, title, vLabel, onToast) {
     if (isFeishuEnv()) {
       const ready = await ensureSdk(apiBase);
       if (ready) {
-        chooseChat(vLabel, onToast);
+        sendShareCard(shareText, title, vLabel, onToast);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(shareText);
+      } catch {
+        onToast('发送失败且无法复制，请手动复制', 'error');
         return;
       }
       onToast(
-        '已复制 ' +
-          vLabel +
-          '。后端未配置飞书应用，请粘贴后手动发送，或点右上角 ··· → 发送至会话',
+        '后端未配置飞书应用，已复制到剪贴板，请手动发送',
         'success'
       );
       return;
     }
 
-    localStorage.setItem(PENDING_KEY, '1');
-    onToast('已复制 ' + vLabel + '，正在飞书内打开…', 'success');
+    stashPendingShare(shareText, title);
+    onToast('正在飞书内打开，选人后即可发送…', 'success');
     openInFeishuWebview(true);
+  }
+
+  async function share(apiBase, shareText, meta, onToast) {
+    const title = meta?.title || 'PRD 文档';
+    const vLabel = meta?.vLabel || '';
+    await shareWithCard(apiBase, shareText, title, vLabel, onToast);
   }
 
   async function maybeAutoShare(apiBase, onToast) {
     const params = new URLSearchParams(location.search);
     if (params.get('feishu_share') !== '1') return;
-    if (localStorage.getItem(PENDING_KEY) !== '1') return;
-    localStorage.removeItem(PENDING_KEY);
 
     params.delete('feishu_share');
     const clean =
       location.pathname + (params.toString() ? '?' + params.toString() : '');
     history.replaceState(null, '', clean);
 
+    const pending = readPendingShare();
+    if (!pending) return;
+
     const ready = await ensureSdk(apiBase);
     if (ready) {
-      chooseChat('内容', onToast);
+      sendShareCard(pending.text, pending.title, pending.title, onToast);
       return;
     }
-    onToast('已复制到剪贴板，请粘贴发送或点右上角 ··· → 发送至会话', 'success');
+    try {
+      await navigator.clipboard.writeText(pending.text);
+      onToast('飞书未就绪，已复制到剪贴板，请手动发送', 'success');
+    } catch {
+      onToast('飞书未就绪，请重新点击分享', 'error');
+    }
   }
 
   return { share, maybeAutoShare, isFeishuEnv };
