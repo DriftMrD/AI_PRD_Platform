@@ -69,21 +69,49 @@ async def _feishu_post(path: str, body: dict | None = None, files: dict | None =
 
 
 async def search_users(query: str, page_size: int = 20) -> list[dict]:
-    """搜索飞书用户（通过通讯录 scope:all/v3 接口）。"""
+    """搜索飞书用户（通过通讯录 scope:all/v3 接口）。
+
+    注意：飞书应用需要 contact:user:readonly 权限才能返回姓名、邮箱等。
+    未配置时 name 回退显示 open_id 片段。
+    """
     data = await _feishu_get(
         "/contact/v3/users",
         params={"page_size": page_size, "name": query},
     )
     items = data.get("data", {}).get("items", [])
-    return [
-        {
-            "open_id": item.get("open_id", ""),
-            "name": item.get("name", "Unknown"),
-            "email": item.get("email", ""),
-            "department": await _resolve_dept_path(item.get("department_ids", [])),
-        }
-        for item in items
-    ]
+    results: list[dict] = []
+    for item in items:
+        oid = item.get("open_id", "")
+        name = item.get("name", "")
+        email = item.get("email", "")
+        dept_ids: list[str] = item.get("department_ids", []) or []
+
+        # fallback: 逐个查用户详情（配置 contact:user:readonly 后可拿到姓名）
+        if not name and oid:
+            try:
+                detail = await _feishu_get(
+                    f"/contact/v3/users/{oid}",
+                    params={"user_id_type": "open_id"},
+                )
+                user = detail.get("data", {}).get("user", {})
+                name = user.get("name", "")
+                email = email or user.get("email", "")
+                dept_ids = dept_ids or user.get("department_ids", []) or []
+            except Exception:
+                pass
+
+        # 仍无姓名 → 用 open_id 片段展示
+        if not name:
+            name = f"用户 {oid[:12]}…" if len(oid) > 12 else f"用户 {oid}"
+
+        department = await _resolve_dept_path(dept_ids) if dept_ids else ""
+        results.append({
+            "open_id": oid,
+            "name": name,
+            "email": email,
+            "department": department,
+        })
+    return results
 
 
 async def _resolve_dept_path(dept_ids: list[str]) -> str:
