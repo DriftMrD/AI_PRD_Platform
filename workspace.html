@@ -627,7 +627,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="js/prd-versions.js?v=3"></script>
-  <script src="js/feishu-share.js?v=4"></script>
+  <script src="js/feishu-share.js?v=5"></script>
   <script src="js/supabase-client.js?v=2"></script>
   <script>
     const PENDING_KEY = 'prd_forge_pending';
@@ -658,18 +658,11 @@
     let _feishuAuthorized = false;       // 当前是否已授权
     let _feishuAuthChecked = false;      // 是否已尝试过检测
 
-    // 检测飞书 OAuth 授权状态（始终请求后端验证，防止 token 缓存过期误判）
+    // 检测飞书 OAuth 授权状态（session token 优先，cookie 仅作同域保底）
     async function checkFeishuOAuth() {
       try {
-        const res = await fetch(API_BASE + '/api/feishu/oauth/status', { credentials: 'include' });
-        if (!res.ok) {
-          _feishuAuthorized = false;
-          showToast('后端连接失败，请稍后重试', 'error');
-          return false;
-        }
-        const data = await res.json();
+        const data = await PrdForgeFeishu.checkOAuthStatus(API_BASE);
         _feishuAuthorized = !!data.authorized;
-        // 缓存 authorize_url 供授权按钮使用
         if (!data.authorized && data.authorize_url) {
           _pendingAuthUrl = data.authorize_url;
         } else {
@@ -735,8 +728,7 @@
       } else {
         // _pendingAuthUrl 为空：重新请求后端获取授权链接
         showToast('正在获取授权链接…', 'success');
-        fetch(API_BASE + '/api/feishu/oauth/status', { credentials: 'include' })
-          .then(res => res.json())
+        PrdForgeFeishu.checkOAuthStatus(API_BASE)
           .then(data => {
             if (data.authorize_url) {
               sessionStorage.setItem('feishu_share_pending', '1');
@@ -760,7 +752,7 @@
         // 读取 OAuth 回调带回的 session token（绕过跨站 Cookie 拦截）
         const sessionToken = params.get('feishu_session');
         if (sessionToken) {
-          sessionStorage.setItem('feishu_session', sessionToken);
+          PrdForgeFeishu.setSessionToken(sessionToken);
         }
 
         // 恢复之前分享时所在的对话 session 参数，让工作台回到那个对话页
@@ -787,6 +779,7 @@
       if (params.has('auth_error')) {
         const errMsg = decodeURIComponent(params.get('auth_error') || '未知错误');
         showToast('飞书授权失败：' + errMsg, 'error');
+        PrdForgeFeishu.clearSessionToken();
         // 清除 URL 参数
         const url = new URL(location.href);
         url.searchParams.delete('auth_error');
@@ -810,7 +803,10 @@
       shareSearchInput.value = '';
       shareResults.innerHTML = '';
       shareOverlay.classList.add('visible');
-      showSearchUI();
+      checkFeishuOAuth().then((authorized) => {
+        if (authorized) showSearchUI();
+        else showAuthPrompt();
+      });
     }
 
     // 搜索输入（防抖 300ms）
@@ -842,7 +838,15 @@
             btn.addEventListener('click', () => onContactClick(btn));
           });
         } catch (e) {
-          shareResults.innerHTML = '<div class="share-result-empty">搜索失败：' + escHtml(String(e)) + '</div>';
+          const msg = String(e.message || e);
+          if (/授权|token|重新/i.test(msg)) {
+            PrdForgeFeishu.clearSessionToken();
+            _feishuAuthorized = false;
+            showAuthPrompt();
+            showToast('飞书授权已过期，请重新授权', 'error');
+            return;
+          }
+          shareResults.innerHTML = '<div class="share-result-empty">搜索失败：' + escHtml(msg) + '</div>';
         }
       }, 300);
     });

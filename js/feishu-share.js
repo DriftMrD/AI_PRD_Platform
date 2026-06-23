@@ -15,6 +15,52 @@ const PrdForgeFeishu = (() => {
   /** 用户通过回调注册的桌面版分享对话框控制 */
   let _browserShareDialog = null;
 
+  const FEISHU_SESSION_KEY = 'feishu_session';
+
+  // 兼容旧版仅存 sessionStorage 的 token
+  (function migrateLegacySession() {
+    const legacy = sessionStorage.getItem(FEISHU_SESSION_KEY);
+    if (legacy && !localStorage.getItem(FEISHU_SESSION_KEY)) {
+      localStorage.setItem(FEISHU_SESSION_KEY, legacy);
+    }
+  })();
+
+  /** 读取 OAuth session token（localStorage 持久化 + sessionStorage 兼容） */
+  function getSessionToken() {
+    return (
+      localStorage.getItem(FEISHU_SESSION_KEY) ||
+      sessionStorage.getItem(FEISHU_SESSION_KEY) ||
+      null
+    );
+  }
+
+  /** 保存 OAuth session token（授权回调后写入，跨页面/刷新可用） */
+  function setSessionToken(token) {
+    if (!token) return;
+    localStorage.setItem(FEISHU_SESSION_KEY, token);
+    sessionStorage.setItem(FEISHU_SESSION_KEY, token);
+  }
+
+  function clearSessionToken() {
+    localStorage.removeItem(FEISHU_SESSION_KEY);
+    sessionStorage.removeItem(FEISHU_SESSION_KEY);
+  }
+
+  /** 向后端检查飞书 OAuth 是否仍有效 */
+  async function checkOAuthStatus(apiBase) {
+    const sessionToken = getSessionToken();
+    const res = await fetch(apiBase + '/api/feishu/oauth/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ feishu_session: sessionToken }),
+    });
+    if (!res.ok) {
+      throw new Error('无法检测飞书授权状态');
+    }
+    return res.json();
+  }
+
   function isFeishuEnv() {
     const ua = navigator.userAgent || '';
     return (
@@ -31,7 +77,7 @@ const PrdForgeFeishu = (() => {
 
   /* ---------- 桌面浏览器：搜索联系人 ---------- */
   async function searchContacts(apiBase, query) {
-    const sessionToken = sessionStorage.getItem('feishu_session') || null;
+    const sessionToken = getSessionToken();
     const res = await fetch(apiBase + '/api/feishu/search-contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,7 +93,7 @@ const PrdForgeFeishu = (() => {
 
   /* ---------- 桌面浏览器：发送 MD 文件 ---------- */
   async function sendFileViaCli(apiBase, content, title, versionLabel, openId) {
-    const sessionToken = sessionStorage.getItem('feishu_session') || null;
+    const sessionToken = getSessionToken();
     const res = await fetch(apiBase + '/api/feishu/share-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -333,5 +379,9 @@ const PrdForgeFeishu = (() => {
     searchContacts,
     sendFileViaCli,
     registerBrowserDialog,
+    getSessionToken,
+    setSessionToken,
+    clearSessionToken,
+    checkOAuthStatus,
   };
 })();

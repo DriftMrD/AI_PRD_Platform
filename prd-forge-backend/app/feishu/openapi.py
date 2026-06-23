@@ -91,17 +91,16 @@ async def search_users(
     *,
     user_access_token: str | None = None,
 ) -> list[dict]:
-    """搜索飞书用户（应用身份走 contact/v3/users，用户身份能拿到姓名）。
+    """按姓名搜索飞书用户（必须用 user_access_token，走 /search/v1/user）。"""
+    if not user_access_token:
+        raise RuntimeError("搜索联系人需要飞书用户授权")
 
-    当传入 user_access_token 时，优先以用户身份调用（可拿到完整姓名/邮箱/部门）。
-    """
-    # 用户身份 → API 返回 name/email 等完整字段
     data = await _feishu_get(
-        "/contact/v3/users",
-        params={"page_size": page_size, "name": query},
+        "/search/v1/user",
+        params={"query": query, "page_size": page_size},
         user_access_token=user_access_token,
     )
-    items = data.get("data", {}).get("items", [])
+    items = data.get("data", {}).get("users", [])
     results: list[dict] = []
     for item in items:
         oid = item.get("open_id", "")

@@ -33,6 +33,10 @@ class SharePayloadCreate(BaseModel):
     title: str = Field(default="PRD 文档", max_length=200)
 
 
+class OAuthStatusRequest(BaseModel):
+    feishu_session: str | None = Field(default=None, description="OAuth session token（绕过跨站 Cookie）")
+
+
 class SearchContactsRequest(BaseModel):
     query: str = Field(min_length=1, max_length=50, description="搜索联系人姓名")
     feishu_session: str | None = Field(default=None, description="OAuth session token（绕过跨站 Cookie）")
@@ -48,16 +52,34 @@ class ShareFileRequest(BaseModel):
 
 # --------------- OAuth 授权 ---------------
 
-@router.get("/feishu/oauth/status")
-async def feishu_oauth_status(request: Request) -> JSONResponse:
-    """检查用户是否已授权飞书。"""
-    token = extract_user_token_from_request(request)
+def _oauth_status_payload(request: Request, feishu_session: str | None) -> dict:
+    """根据 session token / cookie 判断授权状态。"""
+    token = extract_user_token_from_request(request, session_token=feishu_session)
     if token:
-        return JSONResponse({"authorized": True})
-    return JSONResponse({
-        "authorized": False,
-        "authorize_url": build_authorize_url(),
-    })
+        return {"authorized": True}
+    try:
+        authorize_url = build_authorize_url()
+    except RuntimeError:
+        authorize_url = None
+    return {"authorized": False, "authorize_url": authorize_url}
+
+
+@router.get("/feishu/oauth/status")
+async def feishu_oauth_status(
+    request: Request,
+    feishu_session: str | None = Query(default=None, description="OAuth session token"),
+) -> JSONResponse:
+    """检查用户是否已授权飞书（GET，兼容旧前端）。"""
+    return JSONResponse(_oauth_status_payload(request, feishu_session))
+
+
+@router.post("/feishu/oauth/status")
+async def feishu_oauth_status_post(
+    body: OAuthStatusRequest,
+    request: Request,
+) -> JSONResponse:
+    """检查用户是否已授权飞书（POST，推荐：可传较长 session token）。"""
+    return JSONResponse(_oauth_status_payload(request, body.feishu_session))
 
 
 @router.get("/feishu/oauth/callback")
@@ -76,10 +98,15 @@ async def feishu_oauth_callback(
         err_msg = urllib.parse.quote(str(exc)[:200])
         return RedirectResponse(url=f"{frontend_url}?auth_error={err_msg}", status_code=302)
 
-    # 重定向回前端，携带 session token（绕过跨站 Cookie 拦截）
+    # 重定向回前端，携带 session token（绕过跨站 Cookie 拦截；必须 URL 编码）
+    import urllib.parse
+
     session_token = create_session(token_data)
     frontend_url = get_settings().feishu_oauth_frontend_url
-    redirect_url = f"{frontend_url}?auth_ok=1&feishu_session={session_token}"
+    redirect_url = (
+        f"{frontend_url}?auth_ok=1"
+        f"&feishu_session={urllib.parse.quote(session_token, safe='')}"
+    )
     if state:
         redirect_url += f"&state={state}"
 

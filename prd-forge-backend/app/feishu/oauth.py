@@ -43,8 +43,8 @@ _AUTH_BASE = "https://open.feishu.cn/open-apis"
 _TOKEN_URL = f"{_AUTH_BASE}/authen/v1/oidc/access_token"
 _USER_INFO_URL = f"{_AUTH_BASE}/authen/v1/user_info"
 
-# Cookie 基础参数（跨站可携带，https 强制）
-_COOKIE_BASE = {"httponly": True, "secure": True, "samesite": "none"}
+# Cookie 基础参数（跨站可携带，https 强制；path 必须显式为 / 否则部分代理会按回调路径收窄）
+_COOKIE_BASE = {"httponly": True, "secure": True, "samesite": "none", "path": "/"}
 
 
 def _get_redirect_uri() -> str:
@@ -74,7 +74,8 @@ def build_authorize_url(state: str | None = None) -> str:
         "app_id": settings.feishu_app_id,
         "redirect_uri": redirect_uri,
         "state": state,
-        "scope": "contact:user.base:readonly",  # 获取用户基本信息（姓名、邮箱等）
+        # user.base 用于 OAuth 用户信息；user:search 用于 /search/v1/user 按姓名搜联系人
+        "scope": "contact:user.base:readonly contact:user:search",
     }
     qs = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     return f"{_AUTH_BASE}/authen/v1/authorize?{qs}"
