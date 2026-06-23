@@ -1,15 +1,19 @@
 /**
- * 飞书 / 传神分享：选人后直接发送 Markdown 消息卡片（无需粘贴）。
+ * 飞书 / 传神分享：选人后直接发送 MD 文件或消息卡片。
+ * - 飞书 WebView 内：JSAPI sendMessageCard（原生选人 + 卡片消息）
+ * - 桌面浏览器：调用后端 lark-cli 搜索联系人 + 上传文件 + 发送
+ * - 兜底：剪贴板 + 手动粘贴
  */
 const PrdForgeFeishu = (() => {
   const SDK_URL =
     'https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk/h5-js-sdk-1.5.23.js';
   const RELAY_PAGE = 'feishu-share.html';
-  /** 飞书卡片 Markdown 有长度上限，超出则截断 */
   const MAX_CARD_CHARS = 12000;
 
   let sdkReady = false;
   let sdkInitPromise = null;
+  /** 用户通过回调注册的桌面版分享对话框控制 */
+  let _browserShareDialog = null;
 
   function isFeishuEnv() {
     const ua = navigator.userAgent || '';
@@ -20,7 +24,45 @@ const PrdForgeFeishu = (() => {
     );
   }
 
-  function loadScript(src) {
+  /* ---------- 桌面浏览器分享对话框注册 ---------- */
+  function registerBrowserDialog(dialogCallbacks) {
+    _browserShareDialog = dialogCallbacks;
+  }
+
+  /* ---------- 桌面浏览器：搜索联系人 ---------- */
+  async function searchContacts(apiBase, query) {
+    const res = await fetch(apiBase + '/api/feishu/search-contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '搜索失败');
+    }
+    return res.json();
+  }
+
+  /* ---------- 桌面浏览器：发送 MD 文件 ---------- */
+  async function sendFileViaCli(apiBase, content, title, versionLabel, openId) {
+    const res = await fetch(apiBase + '/api/feishu/share-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        title,
+        version_label: versionLabel,
+        recipient_open_id: openId,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '发送失败');
+    }
+    return res.json();
+  }
+
+  /* ---------- SDK 初始化 ---------- */
     return new Promise((resolve, reject) => {
       if (document.querySelector('script[src="' + src + '"]')) {
         resolve();
@@ -215,7 +257,32 @@ const PrdForgeFeishu = (() => {
   async function share(apiBase, shareText, meta, onToast) {
     const title = meta?.title || 'PRD 文档';
     const vLabel = meta?.vLabel || '';
-    await shareWithCard(apiBase, shareText, title, vLabel, onToast);
+
+    // 飞书 WebView → JSAPI 原生选人 + 卡片
+    if (isFeishuEnv()) {
+      await shareWithCard(apiBase, shareText, title, vLabel, onToast);
+      return;
+    }
+
+    // 桌面浏览器 → lark-cli 后端搜索联系人 + 发送 MD 文件
+    if (_browserShareDialog && _browserShareDialog.open) {
+      _browserShareDialog.open({
+        apiBase,
+        shareText,
+        title,
+        vLabel,
+        onToast,
+      });
+      return;
+    }
+
+    // 兜底：剪贴板
+    try {
+      await navigator.clipboard.writeText(shareText);
+      onToast('已复制到剪贴板，请手动粘贴发送', 'success');
+    } catch {
+      onToast('复制失败，请手动复制内容', 'error');
+    }
   }
 
   /** feishu-share.html 中转页：通过 URL 中的 share_id 拉取内容并唤起选人 */
@@ -253,5 +320,12 @@ const PrdForgeFeishu = (() => {
     return true;
   }
 
-  return { share, runRelayShare, isFeishuEnv };
+  return {
+    share,
+    runRelayShare,
+    isFeishuEnv,
+    searchContacts,
+    sendFileViaCli,
+    registerBrowserDialog,
+  };
 })();

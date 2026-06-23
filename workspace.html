@@ -421,6 +421,85 @@
       text-decoration: none;
     }
     .auth-btn:hover, .auth-link:hover { border-color: var(--paper-border); color: var(--ink-dark); }
+    /* 飞书分享联系人搜索模态框 */
+    .share-overlay {
+      position: fixed; inset: 0; z-index: 160;
+      background: rgba(44,26,14,0.35);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s;
+      backdrop-filter: blur(2px);
+    }
+    .share-overlay.visible { opacity: 1; pointer-events: auto; }
+    .share-dialog {
+      background: var(--paper-card); border: 2px solid var(--paper-border);
+      border-radius: var(--radius-paper); width: 400px; max-width: 92%;
+      box-shadow: 4px 6px 0 rgba(44,26,14,0.15), 8px 12px 0 rgba(44,26,14,0.06);
+      transform: translateY(12px); transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex; flex-direction: column; max-height: 80vh;
+    }
+    .share-overlay.visible .share-dialog { transform: translateY(0); }
+    .share-dialog-header {
+      padding: 18px 20px 12px; border-bottom: 1px solid var(--paper-border-lt);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .share-dialog-title {
+      font-family: var(--font-note); font-size: 16px; color: var(--ink-dark);
+    }
+    .share-dialog-close {
+      background: none; border: none; font-size: 18px; cursor: pointer;
+      color: var(--ink-faint); padding: 2px 6px; line-height: 1;
+    }
+    .share-dialog-close:hover { color: var(--ink-dark); }
+    .share-version-badge {
+      display: inline-block; margin-left: 8px; padding: 1px 10px;
+      border: 1px solid var(--accent-orange); border-radius: var(--radius-paper);
+      font-family: var(--font-note); font-size: 11px; color: var(--accent-orange);
+      background: rgba(212,116,42,0.06); vertical-align: middle;
+    }
+    .share-search-wrap {
+      padding: 12px 20px; border-bottom: 1px solid var(--paper-border-lt);
+    }
+    .share-search-input {
+      width: 100%; padding: 8px 12px; border: 1.5px solid var(--paper-border-lt);
+      border-radius: var(--radius-paper); font-family: var(--font-body);
+      font-size: 13px; color: var(--ink-dark); background: var(--paper-base);
+      outline: none; transition: border-color 0.2s;
+    }
+    .share-search-input:focus { border-color: var(--accent-orange); }
+    .share-search-input::placeholder { color: var(--ink-faint); }
+    .share-results {
+      flex: 1; overflow-y: auto; padding: 8px 0; min-height: 80px;
+    }
+    .share-result-empty {
+      text-align: center; padding: 28px 20px; color: var(--ink-faint);
+      font-family: var(--font-body); font-size: 13px;
+    }
+    .share-result-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+      cursor: pointer; transition: background 0.15s; border: none;
+      background: none; width: 100%; text-align: left; font-family: inherit;
+    }
+    .share-result-item:hover { background: rgba(200,169,122,0.12); }
+    .share-result-item.sending {
+      opacity: 0.6; pointer-events: none;
+    }
+    .share-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent-orange); color: var(--paper-card);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-note); font-size: 14px; flex-shrink: 0;
+    }
+    .share-contact-name {
+      font-family: var(--font-body); font-size: 14px; color: var(--ink-dark);
+      font-weight: 500;
+    }
+    .share-contact-dept {
+      font-family: var(--font-body); font-size: 11px; color: var(--ink-faint);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .share-sent-icon {
+      margin-left: auto; color: var(--accent-green); font-size: 18px;
+    }
     @media (max-width: 860px) {
       .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
       .panel-left { border-right: none; border-bottom: 2px solid var(--paper-border); }
@@ -508,6 +587,21 @@
     </section>
   </div>
 
+  <div class="share-overlay" id="shareOverlay">
+    <div class="share-dialog">
+      <div class="share-dialog-header">
+        <span class="share-dialog-title">分享到飞书<span class="share-version-badge" id="shareVersionBadge">v-</span></span>
+        <button class="share-dialog-close" id="shareDialogClose">&times;</button>
+      </div>
+      <div class="share-search-wrap">
+        <input class="share-search-input" id="shareSearchInput" placeholder="搜索飞书联系人…" autocomplete="off" />
+      </div>
+      <div class="share-results" id="shareResults">
+        <div class="share-result-empty" id="shareResultHint">输入姓名搜索飞书联系人</div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
   <script src="js/supabase-config.js"></script>
@@ -533,6 +627,94 @@
       const api = new URLSearchParams(location.search).get('api');
       return api ? 'index.html?api=' + encodeURIComponent(api) : 'index.html';
     })();
+
+    // -- 桌面浏览器飞书分享对话框 --
+    const shareOverlay = document.getElementById('shareOverlay');
+    const shareVersionBadge = document.getElementById('shareVersionBadge');
+    const shareSearchInput = document.getElementById('shareSearchInput');
+    const shareResults = document.getElementById('shareResults');
+    let _pendingShare = null;
+    let _shareSearchTimer = null;
+
+    PrdForgeFeishu.registerBrowserDialog({
+      open({ apiBase, _shareText, title, vLabel, onToast }) {
+        const s = getCurrent();
+        const content = getExportablePrdText(s);
+        _pendingShare = { apiBase, content, title: s?.title || title, vLabel, onToast };
+        shareVersionBadge.textContent = vLabel;
+        shareSearchInput.value = '';
+        shareResults.innerHTML = '<div class="share-result-empty">输入姓名搜索飞书联系人</div>';
+        shareOverlay.classList.add('visible');
+        setTimeout(() => shareSearchInput.focus(), 100);
+      }
+    });
+
+    // 搜索输入（防抖 300ms）
+    shareSearchInput.addEventListener('input', () => {
+      clearTimeout(_shareSearchTimer);
+      const q = shareSearchInput.value.trim();
+      if (!q) {
+        shareResults.innerHTML = '<div class="share-result-empty">输入姓名搜索飞书联系人</div>';
+        return;
+      }
+      shareResults.innerHTML = '<div class="share-result-empty">搜索中…</div>';
+      _shareSearchTimer = setTimeout(async () => {
+        try {
+          const data = await PrdForgeFeishu.searchContacts(API_BASE, q);
+          const users = data.users || [];
+          if (users.length === 0) {
+            shareResults.innerHTML = '<div class="share-result-empty">未找到匹配的联系人</div>';
+            return;
+          }
+          shareResults.innerHTML = users.map(u => {
+            const initial = (u.name || '?')[0];
+            return `<button class="share-result-item" data-open-id="${u.open_id}" data-name="${escHtml(u.name)}">
+              <div class="share-avatar">${initial}</div>
+              <div><div class="share-contact-name">${escHtml(u.name)}</div><div class="share-contact-dept">${escHtml(u.department || u.email || '')}</div></div>
+            </button>`;
+          }).join('');
+          // 点击结果发送
+          shareResults.querySelectorAll('.share-result-item').forEach(btn => {
+            btn.addEventListener('click', () => onContactClick(btn));
+          });
+        } catch (e) {
+          shareResults.innerHTML = '<div class="share-result-empty">搜索失败：' + escHtml(String(e)) + '</div>';
+        }
+      }, 300);
+    });
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    async function onContactClick(btnEl) {
+      if (!_pendingShare) return;
+      btnEl.classList.add('sending');
+      btnEl.innerHTML += '<span class="share-sent-icon">⏳</span>';
+      const openId = btnEl.dataset.openId;
+      const name = btnEl.dataset.name;
+      try {
+        await PrdForgeFeishu.sendFileViaCli(
+          _pendingShare.apiBase,
+          _pendingShare.content,
+          _pendingShare.title,
+          _pendingShare.vLabel,
+          openId
+        );
+        btnEl.querySelector('.share-sent-icon').textContent = '✓';
+        _pendingShare.onToast('已发送 ' + _pendingShare.vLabel + ' 给 ' + name, 'success');
+        setTimeout(closeShareDialog, 600);
+      } catch (e) {
+        btnEl.classList.remove('sending');
+        const icon = btnEl.querySelector('.share-sent-icon');
+        if (icon) icon.remove();
+        _pendingShare.onToast('发送失败：' + e.message, 'error');
+      }
+    }
+
+    function closeShareDialog() { shareOverlay.classList.remove('visible'); _pendingShare = null; }
+
+    document.getElementById('shareDialogClose').addEventListener('click', closeShareDialog);
+    shareOverlay.addEventListener('click', (e) => { if (e.target === shareOverlay) closeShareDialog(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shareOverlay.classList.contains('visible')) closeShareDialog(); });
 
     let sessions = [];
     let currentId = null;
