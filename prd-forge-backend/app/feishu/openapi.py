@@ -57,6 +57,7 @@ async def _feishu_post(
     path: str,
     body: dict | None = None,
     files: dict | None = None,
+    params: dict[str, Any] | None = None,
     *,
     user_access_token: str | None = None,
 ) -> dict:
@@ -67,6 +68,7 @@ async def _feishu_post(
             resp = await client.post(
                 f"{_FEISHU_API}{path}",
                 headers={"Authorization": f"Bearer {token}"},
+                params=params,
                 files=files,
             )
         else:
@@ -76,6 +78,7 @@ async def _feishu_post(
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json; charset=utf-8",
                 },
+                params=params,
                 json=body,
             )
         resp.raise_for_status()
