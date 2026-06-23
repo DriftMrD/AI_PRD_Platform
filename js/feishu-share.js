@@ -4,9 +4,6 @@
 const PrdForgeFeishu = (() => {
   const SDK_URL =
     'https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk/h5-js-sdk-1.5.23.js';
-  const PENDING_KEY = 'prd_feishu_share_pending';
-  const TEXT_KEY = 'prd_feishu_share_text';
-  const TITLE_KEY = 'prd_feishu_share_title';
   const RELAY_PAGE = 'feishu-share.html';
   /** 飞书卡片 Markdown 有长度上限，超出则截断 */
   const MAX_CARD_CHARS = 12000;
@@ -105,17 +102,17 @@ const PrdForgeFeishu = (() => {
     };
   }
 
-  /** 外部浏览器：打开无需登录的分享中转页，避免飞书内跳到登录页 */
-  function buildShareRelayUrl() {
+  function buildShareRelayUrl(shareId) {
     const url = new URL(RELAY_PAGE, location.href);
     const api = new URLSearchParams(location.search).get('api');
     if (api) url.searchParams.set('api', api);
     url.searchParams.set('feishu_share', '1');
+    url.searchParams.set('share_id', shareId);
     return url.href.split('#')[0];
   }
 
-  function openInFeishuWebview() {
-    const target = buildShareRelayUrl();
+  function openInFeishuWebview(shareId) {
+    const target = buildShareRelayUrl(shareId);
     const applink =
       'https://applink.feishu.cn/client/web_url/open?mode=window&url=' +
       encodeURIComponent(target);
@@ -128,21 +125,30 @@ const PrdForgeFeishu = (() => {
     a.remove();
   }
 
-  function stashPendingShare(shareText, title) {
-    localStorage.setItem(PENDING_KEY, '1');
-    localStorage.setItem(TEXT_KEY, shareText);
-    localStorage.setItem(TITLE_KEY, title);
+  async function createSharePayload(apiBase, shareText, title) {
+    const res = await fetch(apiBase + '/api/feishu/share-payload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: shareText, title }),
+    });
+    if (!res.ok) {
+      throw new Error('暂存分享内容失败');
+    }
+    const data = await res.json();
+    if (!data.shareId) {
+      throw new Error('无效的服务端响应');
+    }
+    return data.shareId;
   }
 
-  function readPendingShare() {
-    if (localStorage.getItem(PENDING_KEY) !== '1') return null;
-    const text = localStorage.getItem(TEXT_KEY);
-    const title = localStorage.getItem(TITLE_KEY);
-    localStorage.removeItem(PENDING_KEY);
-    localStorage.removeItem(TEXT_KEY);
-    localStorage.removeItem(TITLE_KEY);
-    if (!text) return null;
-    return { text, title: title || 'PRD 文档' };
+  async function fetchSharePayload(apiBase, shareId) {
+    const res = await fetch(
+      apiBase + '/api/feishu/share-payload/' + encodeURIComponent(shareId)
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.text) return null;
+    return { text: data.text, title: data.title || 'PRD 文档' };
   }
 
   function sendShareCard(shareText, title, vLabel, onToast) {
@@ -195,9 +201,15 @@ const PrdForgeFeishu = (() => {
       return;
     }
 
-    stashPendingShare(shareText, title);
+    let shareId;
+    try {
+      shareId = await createSharePayload(apiBase, shareText, title);
+    } catch (e) {
+      onToast('分享失败：' + e.message, 'error');
+      return;
+    }
     onToast('正在飞书内打开选人…', 'success');
-    openInFeishuWebview();
+    openInFeishuWebview(shareId);
   }
 
   async function share(apiBase, shareText, meta, onToast) {
@@ -206,16 +218,25 @@ const PrdForgeFeishu = (() => {
     await shareWithCard(apiBase, shareText, title, vLabel, onToast);
   }
 
-  /** feishu-share.html 中转页：读取待发送内容并唤起选人 */
+  /** feishu-share.html 中转页：通过 URL 中的 share_id 拉取内容并唤起选人 */
   async function runRelayShare(apiBase, onStatus) {
     const params = new URLSearchParams(location.search);
     if (params.get('feishu_share') !== '1') return false;
 
-    const pending = readPendingShare();
-    if (!pending) return false;
+    const shareId = params.get('share_id');
+    if (!shareId) {
+      onStatus('分享链接无效，请返回工作台重新点击分享', true);
+      return false;
+    }
+
+    onStatus('正在加载分享内容…');
+    const pending = await fetchSharePayload(apiBase, shareId);
+    if (!pending) {
+      onStatus('分享内容已过期，请返回工作台重新点击分享', true);
+      return false;
+    }
 
     onStatus('正在连接飞书…');
-
     const ready = await ensureSdk(apiBase);
     if (ready) {
       onStatus('请选择要发送的联系人…');
@@ -232,10 +253,5 @@ const PrdForgeFeishu = (() => {
     return true;
   }
 
-  async function maybeAutoShare(apiBase, onToast) {
-    if (!location.pathname.endsWith(RELAY_PAGE)) return;
-    await runRelayShare(apiBase, onToast);
-  }
-
-  return { share, maybeAutoShare, runRelayShare, isFeishuEnv };
+  return { share, runRelayShare, isFeishuEnv };
 })();
