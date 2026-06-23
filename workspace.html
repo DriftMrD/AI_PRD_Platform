@@ -611,13 +611,11 @@
         <div class="share-auth-text">需要授权飞书账号，才能搜索联系人姓名</div>
         <button class="sketch-btn" id="shareAuthBtn" style="margin-top:8px;background:var(--accent-orange);color:#fff;border-color:var(--accent-orange);">授权飞书</button>
       </div>
-      <!-- 已授权 / 跳过授权 -->
-      <div class="share-search-wrap" id="shareSearchWrap">
+      <!-- 已授权才显示搜索区 -->
+      <div class="share-search-wrap hidden" id="shareSearchWrap">
         <input class="share-search-input" id="shareSearchInput" placeholder="搜索飞书联系人…" autocomplete="off" />
       </div>
-      <div class="share-results" id="shareResults">
-        <div class="share-result-empty" id="shareResultHint">输入姓名搜索飞书联系人</div>
-      </div>
+      <div class="share-results" id="shareResults"></div>
     </div>
   </div>
 
@@ -694,7 +692,10 @@
         _pendingShare = { apiBase, content, title: s?.title || title, vLabel, onToast };
         shareVersionBadge.textContent = vLabel;
         shareSearchInput.value = '';
-        shareResults.innerHTML = '<div class="share-result-empty">输入姓名搜索飞书联系人</div>';
+        // 授权检测前：隐藏搜索区、清空结果
+        shareSearchWrap.classList.add('hidden');
+        shareAuthPrompt.classList.add('hidden');
+        shareResults.innerHTML = '';
         shareOverlay.classList.add('visible');
 
         // 检查授权状态
