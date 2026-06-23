@@ -730,6 +730,7 @@
       if (_pendingAuthUrl) {
         // 保存当前状态到 sessionStorage，授权回调后恢复
         sessionStorage.setItem('feishu_share_pending', '1');
+        if (currentId) sessionStorage.setItem('feishu_share_pending_session', currentId);
         window.location.href = _pendingAuthUrl;
       } else {
         // _pendingAuthUrl 为空：重新请求后端获取授权链接
@@ -739,6 +740,7 @@
           .then(data => {
             if (data.authorize_url) {
               sessionStorage.setItem('feishu_share_pending', '1');
+              if (currentId) sessionStorage.setItem('feishu_share_pending_session', currentId);
               window.location.href = data.authorize_url;
             } else {
               showToast('无法获取授权链接，请检查飞书应用配置', 'error');
@@ -754,28 +756,25 @@
       if (params.get('auth_ok') === '1') {
         _feishuAuthorized = true;
         _feishuAuthChecked = true;
-        showToast('飞书授权成功，可以搜索联系人姓名了', 'success');
-        // 清除 URL 中的 auth_ok 参数
+
+        // 恢复之前分享时所在的对话 session 参数，让工作台回到那个对话页
+        const pendingSessionId = sessionStorage.getItem('feishu_share_pending_session');
+        const pendingShare = sessionStorage.getItem('feishu_share_pending') === '1';
+
         const url = new URL(location.href);
         url.searchParams.delete('auth_ok');
         url.searchParams.delete('state');
+        if (pendingSessionId) {
+          url.searchParams.set('session', pendingSessionId);
+        }
         window.history.replaceState({}, '', url.toString());
-        // 如果之前有待分享，直接弹出分享弹窗（不经过按钮内容校验）
-        if (sessionStorage.getItem('feishu_share_pending') === '1') {
-          sessionStorage.removeItem('feishu_share_pending');
-          setTimeout(() => {
-            const s = getCurrent();
-            const content = getExportablePrdText(s) || '';
-            const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
-            const title = (s?.title || 'PRD 文档') + ' · ' + vLabel;
 
-            _pendingShare = { apiBase: API_BASE, content, title, vLabel, onToast: showToast };
-            shareVersionBadge.textContent = vLabel;
-            shareSearchInput.value = '';
-            shareResults.innerHTML = '';
-            shareOverlay.classList.add('visible');
-            showSearchUI();
-          }, 800);
+        showToast('飞书授权成功，可以搜索联系人姓名了', 'success');
+
+        // 如果之前有待分享，标记为待处理（init() 加载完对话后自动弹窗）
+        if (pendingShare) {
+          sessionStorage.removeItem('feishu_share_pending');
+          window.__feishuPendingShare = true;
         }
       }
       if (params.has('auth_error')) {
@@ -788,8 +787,24 @@
         url.searchParams.delete('state');
         window.history.replaceState({}, '', url.toString());
         sessionStorage.removeItem('feishu_share_pending');
+        sessionStorage.removeItem('feishu_share_pending_session');
       }
     })();
+
+    // 授权回调后自动打开分享弹窗（被 initOAuthState 调用，此时 session 已恢复）
+    function openPendingShare() {
+      const s = getCurrent();
+      const content = getExportablePrdText(s) || '';
+      const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
+      const title = (s?.title || 'PRD 文档') + ' · ' + vLabel;
+
+      _pendingShare = { apiBase: API_BASE, content, title, vLabel, onToast: showToast };
+      shareVersionBadge.textContent = vLabel;
+      shareSearchInput.value = '';
+      shareResults.innerHTML = '';
+      shareOverlay.classList.add('visible');
+      showSearchUI();
+    }
 
     // 搜索输入（防抖 300ms）
     shareSearchInput.addEventListener('input', () => {
@@ -1972,6 +1987,12 @@
         openSession(urlSessionId);
       } else {
         showListView();
+      }
+
+      // 飞书 OAuth 授权回来后，自动弹出分享弹窗
+      if (window.__feishuPendingShare) {
+        delete window.__feishuPendingShare;
+        openPendingShare();
       }
     }
 
