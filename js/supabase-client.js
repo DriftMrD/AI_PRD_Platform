@@ -17,10 +17,16 @@
     if (!PrdForge._client) {
       PrdForge._client = supabase.createClient(
         window.PRD_FORGE_SUPABASE.url,
-        window.PRD_FORGE_SUPABASE.anonKey
+        window.PRD_FORGE_SUPABASE.anonKey,
+        { auth: { detectSessionInUrl: true } }
       );
     }
     return PrdForge._client;
+  };
+
+  PrdForge.getAuthRedirectUrl = function (page) {
+    const target = page || 'login.html';
+    return new URL(target, window.location.href).href;
   };
 
   PrdForge.getSession = async function () {

@@ -60,16 +60,15 @@
     .back { display: inline-block; margin-top: 16px; font-family: var(--font-note); font-size: 14px; color: var(--ink-light); text-decoration: none; }
     .back:hover { color: var(--ink-dark); }
     .hint { font-size: 12px; color: var(--ink-faint); margin-top: 4px; font-family: var(--font-note); }
-    .email-row { display: flex; gap: 8px; align-items: stretch; }
-    .email-row input { flex: 1; min-width: 0; }
     .secondary-btn {
-      flex-shrink: 0; padding: 10px 12px; border: 2px solid var(--paper-border);
+      width: 100%; margin-top: 8px; padding: 10px; border: 2px solid var(--paper-border);
       background: transparent; color: var(--ink-mid); font-family: var(--font-note);
-      font-size: 14px; cursor: pointer; border-radius: var(--radius-paper); white-space: nowrap;
+      font-size: 14px; cursor: pointer; border-radius: var(--radius-paper);
     }
     .secondary-btn:hover:not(:disabled) { background: rgba(245,237,214,0.8); color: var(--ink-dark); }
     .secondary-btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .success { color: #2d6a2d; font-family: var(--font-note); font-size: 13px; margin-top: 8px; min-height: 18px; }
+    .pending-note { font-size: 14px !important; color: var(--ink-mid) !important; line-height: 1.65; padding: 10px 12px; background: rgba(245,237,214,0.8); border: 1px dashed var(--paper-border-lt); }
   </style>
 </head>
 <body>
@@ -101,13 +100,9 @@
         <label for="confirmPassword">确认密码</label>
         <input type="password" id="confirmPassword" minlength="6" autocomplete="new-password" placeholder="再次输入密码">
       </div>
-      <div class="field" id="otpField" style="display:none">
-        <label for="otpCode">邮箱验证码</label>
-        <div class="email-row">
-          <input type="text" id="otpCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="6 位验证码">
-          <button type="button" class="secondary-btn" id="resendBtn" disabled>重新发送</button>
-        </div>
-        <div class="hint">验证码已发送至邮箱，请查收（有效期约 1 小时）</div>
+      <div class="field" id="signupPendingField" style="display:none">
+        <div class="hint pending-note">确认邮件已发送。请打开邮箱，点击 <strong>Confirm email address</strong> 链接完成注册（会自动跳转回本网站并登录）。</div>
+        <button type="button" class="secondary-btn" id="resendBtn" disabled>重新发送确认邮件</button>
       </div>
       <button type="submit" class="submit-btn" id="submitBtn">登录</button>
       <div class="success" id="successMsg"></div>
@@ -125,7 +120,7 @@
     const RESEND_COOLDOWN_SEC = 60;
 
     let mode = 'signin';
-    let signupCodeSent = false;
+    let signupEmailSent = false;
     let resendTimer = null;
     let resendRemaining = 0;
 
@@ -140,8 +135,7 @@
     const errorMsg = document.getElementById('errorMsg');
     const successMsg = document.getElementById('successMsg');
     const emailHint = document.getElementById('emailHint');
-    const otpField = document.getElementById('otpField');
-    const otpCodeInput = document.getElementById('otpCode');
+    const signupPendingField = document.getElementById('signupPendingField');
     const resendBtn = document.getElementById('resendBtn');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
@@ -160,11 +154,13 @@
     }
 
     function resetSignupFlow() {
-      signupCodeSent = false;
-      otpField.style.display = 'none';
-      otpCodeInput.value = '';
-      otpCodeInput.required = false;
+      signupEmailSent = false;
+      signupPendingField.style.display = 'none';
       confirmPasswordInput.value = '';
+      emailInput.disabled = false;
+      passwordInput.disabled = false;
+      confirmPasswordInput.disabled = false;
+      submitBtn.style.display = 'block';
       clearResendTimer();
       updateSignupUi();
     }
@@ -176,7 +172,7 @@
       }
       resendRemaining = 0;
       resendBtn.disabled = true;
-      resendBtn.textContent = '重新发送';
+      resendBtn.textContent = '重新发送确认邮件';
     }
 
     function startResendCooldown(seconds) {
@@ -189,7 +185,7 @@
         if (resendRemaining <= 0) {
           clearResendTimer();
           resendBtn.disabled = false;
-          resendBtn.textContent = '重新发送';
+          resendBtn.textContent = '重新发送确认邮件';
           return;
         }
         resendBtn.textContent = `${resendRemaining}s 后可重发`;
@@ -199,16 +195,12 @@
     function updateSignupUi() {
       const isSignup = mode === 'signup';
       emailHint.style.display = isSignup ? 'block' : 'none';
-      emailInput.placeholder = isSignup ? 'name@transsion.com' : 'name@transsion.com';
-      confirmPasswordField.style.display = isSignup && !signupCodeSent ? 'block' : 'none';
-      confirmPasswordInput.required = isSignup && !signupCodeSent;
-
-      if (!isSignup) {
-        submitBtn.textContent = '登录';
-        return;
-      }
-
-      submitBtn.textContent = signupCodeSent ? '完成注册' : '发送验证码';
+      emailInput.placeholder = 'name@transsion.com';
+      confirmPasswordField.style.display = isSignup && !signupEmailSent ? 'block' : 'none';
+      confirmPasswordInput.required = isSignup && !signupEmailSent;
+      submitBtn.style.display = isSignup && signupEmailSent ? 'none' : 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = isSignup ? '注册' : '登录';
     }
 
     function validateSignupPasswords() {
@@ -241,7 +233,7 @@
       });
     });
 
-    async function sendSignupCode() {
+    async function sendSignupEmail() {
       const sb = PrdForge.getSupabase();
       const email = emailInput.value.trim();
       const password = passwordInput.value;
@@ -251,7 +243,11 @@
       }
       validateSignupPasswords();
 
-      const { data, error } = await sb.auth.signUp({ email, password });
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: PrdForge.getAuthRedirectUrl('login.html') },
+      });
       if (error) {
         const msg = (error.message || '').toLowerCase();
         if (msg.includes('already registered') || msg.includes('already exists')) {
@@ -265,32 +261,18 @@
         return;
       }
 
-      signupCodeSent = true;
-      otpField.style.display = 'block';
-      otpCodeInput.required = true;
-      successMsg.textContent = '验证码已发送，请查收邮箱';
+      signupEmailSent = true;
+      signupPendingField.style.display = 'block';
+      emailInput.disabled = true;
+      passwordInput.disabled = true;
+      confirmPasswordInput.disabled = true;
+      successMsg.textContent = '确认邮件已发送，请查收邮箱';
       startResendCooldown(RESEND_COOLDOWN_SEC);
       updateSignupUi();
-      otpCodeInput.focus();
-    }
-
-    async function verifySignupCode() {
-      const sb = PrdForge.getSupabase();
-      const email = emailInput.value.trim();
-      const token = otpCodeInput.value.trim();
-
-      if (!/^\d{6}$/.test(token)) {
-        throw new Error('请输入 6 位数字验证码');
-      }
-
-      const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'signup' });
-      if (error) throw error;
-      if (!data.session) throw new Error('验证成功但未获得登录会话，请尝试登录');
-      location.href = redirect;
     }
 
     resendBtn.addEventListener('click', async () => {
-      if (!PrdForge.isConfigured() || mode !== 'signup' || !signupCodeSent) return;
+      if (!PrdForge.isConfigured() || mode !== 'signup' || !signupEmailSent) return;
 
       const email = emailInput.value.trim();
       if (!isAllowedEmail(email)) {
@@ -305,7 +287,7 @@
         const sb = PrdForge.getSupabase();
         const { error } = await sb.auth.resend({ type: 'signup', email });
         if (error) throw error;
-        successMsg.textContent = '验证码已重新发送';
+        successMsg.textContent = '确认邮件已重新发送';
         startResendCooldown(RESEND_COOLDOWN_SEC);
       } catch (err) {
         errorMsg.textContent = err.message || '发送失败';
@@ -336,20 +318,35 @@
           throw new Error('仅支持 @transsion.com 企业邮箱注册');
         }
 
-        if (!signupCodeSent) {
+        if (!signupEmailSent) {
           validateSignupPasswords();
-          await sendSignupCode();
-        } else {
-          await verifySignupCode();
+          await sendSignupEmail();
         }
       } catch (err) {
         errorMsg.textContent = err.message || '操作失败';
       } finally {
-        submitBtn.disabled = false;
+        updateSignupUi();
       }
     });
 
     updateSignupUi();
+
+    (async function handleEmailConfirmCallback() {
+      if (!PrdForge.isConfigured()) return;
+      if (!location.hash || !location.hash.includes('access_token')) return;
+
+      const sb = PrdForge.getSupabase();
+      const { data: { session }, error } = await sb.auth.getSession();
+      if (error) {
+        errorMsg.textContent = error.message;
+        return;
+      }
+      if (session) {
+        history.replaceState(null, '', location.pathname + location.search);
+        successMsg.textContent = '邮箱已确认，正在进入…';
+        location.href = redirect;
+      }
+    })();
 
     (async function checkExistingSession() {
       if (!PrdForge.isConfigured()) return;

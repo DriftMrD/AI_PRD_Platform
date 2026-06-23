@@ -92,7 +92,8 @@ async function configureAuth(token, projectRef, siteUrl, redirectUrls) {
       mailer_templates_confirmation_content:
         '<h2>PRD Forge 注册验证</h2>' +
         '<p>您的验证码是：<strong>{{ .Token }}</strong></p>' +
-        '<p>验证码有效期约 1 小时。如非本人操作请忽略此邮件。</p>',
+        '<p>验证码有效期约 1 小时，请在注册页输入。</p>' +
+        '<p>或点击链接直接确认：<a href="{{ .ConfirmationURL }}">确认邮箱</a></p>',
     }),
   });
   console.log('  ✓ Email 已开启，注册需邮箱验证码确认');
@@ -140,9 +141,9 @@ async function main() {
   const anonKey = env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
   const token = env.SUPABASE_ACCESS_TOKEN;
   const projectRef = env.SUPABASE_PROJECT_REF || projectRefFromUrl(url);
-  const siteUrl = env.SUPABASE_SITE_URL || 'http://localhost:5173';
+  const siteUrl = env.SUPABASE_SITE_URL || 'https://driftmrd.github.io/AI_PRD_Platform/login.html';
   const redirectUrls = env.SUPABASE_REDIRECT_URLS ||
-    'http://localhost:5173/**,http://127.0.0.1:5173/**,https://driftmrd.github.io/AI_PRD_Platform/**';
+    'https://driftmrd.github.io/AI_PRD_Platform/**,http://localhost:5173/**,http://127.0.0.1:5173/**';
 
   if (!existsSync(envPath)) {
     console.error('❌ 找不到 .env.supabase');
