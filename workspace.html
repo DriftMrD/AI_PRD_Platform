@@ -1550,7 +1550,43 @@
       if (selectedVersion) showToast('已下载 v' + selectedVersion, 'success');
     });
 
-    // -- 分享（飞书一键转发）--
+    // -- 分享（飞书 / 传神）--
+    function isInFeishuClient() {
+      return typeof window.tt !== 'undefined' && typeof window.tt.chooseChat === 'function';
+    }
+
+    /** 外部浏览器唤起飞书/传神客户端（client/chat/create 非官方协议，会显示「此页面无效」） */
+    function openFeishuClient() {
+      const schemes = ['feishu://applink/client/op/open', 'lark://applink/client/op/open'];
+      for (const url of schemes) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    }
+
+    function shareViaFeishuChooseChat(vLabel) {
+      window.tt.chooseChat({
+        allowCreateGroup: false,
+        multiSelect: false,
+        selectType: 2,
+        confirmTitle: '分享给',
+        confirmDesc: '内容已复制到剪贴板，可在留言框粘贴（Ctrl+V / ⌘V）后发送',
+        showMessageInput: true,
+        externalChat: true,
+        success() {
+          showToast('已复制 ' + vLabel, 'success');
+        },
+        fail() {
+          showToast('已复制 ' + vLabel + '，请手动打开飞书发送', 'success');
+          openFeishuClient();
+        },
+      });
+    }
+
     document.getElementById('feishuShareBtn').addEventListener('click', () => {
       const s = getCurrent();
       const text = getExportablePrdText(s);
@@ -1561,9 +1597,12 @@
       const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
       const shareText = '【' + (s?.title || 'PRD 文档') + ' · ' + vLabel + '】\n\n' + text;
       navigator.clipboard.writeText(shareText).then(() => {
-        showToast('已复制 ' + vLabel + '，飞书中选择联系人后 Ctrl+V 粘贴即可', 'success');
-        // 唤起飞书新建消息/选择联系人，chat/create 会弹出"选择发送给谁"对话框
-        window.open('https://applink.feishu.cn/client/chat/create', '_blank');
+        if (isInFeishuClient()) {
+          shareViaFeishuChooseChat(vLabel);
+          return;
+        }
+        showToast('已复制 ' + vLabel + '，正在打开飞书…', 'success');
+        openFeishuClient();
       }).catch(() => {
         showToast('复制失败，请手动复制', 'error');
       });
