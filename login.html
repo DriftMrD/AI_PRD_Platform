@@ -97,6 +97,10 @@
         <label for="password">密码</label>
         <input type="password" id="password" required minlength="6" autocomplete="current-password" placeholder="至少 6 位">
       </div>
+      <div class="field" id="confirmPasswordField" style="display:none">
+        <label for="confirmPassword">确认密码</label>
+        <input type="password" id="confirmPassword" minlength="6" autocomplete="new-password" placeholder="再次输入密码">
+      </div>
       <div class="field" id="otpField" style="display:none">
         <label for="otpCode">邮箱验证码</label>
         <div class="email-row">
@@ -141,6 +145,8 @@
     const resendBtn = document.getElementById('resendBtn');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
+    const confirmPasswordField = document.getElementById('confirmPasswordField');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
 
     function isAllowedEmail(email) {
       const at = email.lastIndexOf('@');
@@ -158,6 +164,7 @@
       otpField.style.display = 'none';
       otpCodeInput.value = '';
       otpCodeInput.required = false;
+      confirmPasswordInput.value = '';
       clearResendTimer();
       updateSignupUi();
     }
@@ -193,6 +200,8 @@
       const isSignup = mode === 'signup';
       emailHint.style.display = isSignup ? 'block' : 'none';
       emailInput.placeholder = isSignup ? 'name@transsion.com' : 'name@transsion.com';
+      confirmPasswordField.style.display = isSignup && !signupCodeSent ? 'block' : 'none';
+      confirmPasswordInput.required = isSignup && !signupCodeSent;
 
       if (!isSignup) {
         submitBtn.textContent = '登录';
@@ -200,6 +209,17 @@
       }
 
       submitBtn.textContent = signupCodeSent ? '完成注册' : '发送验证码';
+    }
+
+    function validateSignupPasswords() {
+      const password = passwordInput.value;
+      const confirmPassword = confirmPasswordInput.value;
+      if (password.length < 6) {
+        throw new Error('密码至少 6 位');
+      }
+      if (password !== confirmPassword) {
+        throw new Error('两次输入的密码不一致');
+      }
     }
 
     if (!PrdForge.isConfigured() || isSetup) {
@@ -215,6 +235,7 @@
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
         resetSignupFlow();
         clearMessages();
+        confirmPasswordInput.value = '';
         passwordInput.autocomplete = mode === 'signin' ? 'current-password' : 'new-password';
         updateSignupUi();
       });
@@ -228,9 +249,7 @@
       if (!isAllowedEmail(email)) {
         throw new Error('仅支持 @transsion.com 企业邮箱注册');
       }
-      if (password.length < 6) {
-        throw new Error('密码至少 6 位');
-      }
+      validateSignupPasswords();
 
       const { data, error } = await sb.auth.signUp({ email, password });
       if (error) {
@@ -318,6 +337,7 @@
         }
 
         if (!signupCodeSent) {
+          validateSignupPasswords();
           await sendSignupCode();
         } else {
           await verifySignupCode();
