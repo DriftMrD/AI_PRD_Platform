@@ -1561,8 +1561,9 @@
       const vLabel = selectedVersion ? 'v' + selectedVersion : '最新版本';
       const shareText = '【' + (s?.title || 'PRD 文档') + ' · ' + vLabel + '】\n\n' + text;
       navigator.clipboard.writeText(shareText).then(() => {
-        showToast('已分享 ' + vLabel + '，内容已复制到剪贴板并尝试打开飞书', 'success');
-        window.open('https://applink.feishu.cn/client/chat/open?', '_blank');
+        showToast('已复制 ' + vLabel + '，飞书中选择联系人后 Ctrl+V 粘贴即可', 'success');
+        // 唤起飞书新建消息/选择联系人，chat/create 会弹出"选择发送给谁"对话框
+        window.open('https://applink.feishu.cn/client/chat/create', '_blank');
       }).catch(() => {
         showToast('复制失败，请手动复制', 'error');
       });
