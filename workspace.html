@@ -269,12 +269,13 @@
       font-family: var(--font-note); font-size: 16px; color: var(--ink-faint);
       text-align: center; padding: 60px 20px;
     }
-    .prd-editor {
-      width: 100%; min-height: 300px; padding: 0;
-      border: none; outline: none; resize: vertical;
-      font-family: var(--font-note); font-size: 15px; line-height: 1.85;
-      color: var(--ink-mid); background: transparent;
+    .prd-editor-mount {
+      width: 100%; min-height: 300px;
     }
+    .prd-editor-mount .cm-editor {
+      outline: none; height: auto; min-height: 300px; background: transparent;
+    }
+    .prd-editor-mount .cm-scroller { font-family: var(--font-note); }
     .diff-view { display: none; flex-direction: column; gap: 12px; }
     .diff-view.visible { display: flex; }
     .diff-hunk {
@@ -592,7 +593,7 @@
       <div class="prd-body">
         <div class="prd-preview" id="prdPreview"></div>
         <pre class="prd-content" id="prdContent" style="display:none"></pre>
-        <textarea class="prd-editor" id="prdEditor" style="display:none" rows="20"></textarea>
+        <div class="prd-editor-mount" id="prdEditorMount" style="display:none"></div>
         <div class="diff-view" id="diffView"></div>
         <div class="prd-placeholder" id="prdPlaceholder">PRD 文档将在这里实时生成</div>
       </div>
@@ -917,7 +918,35 @@
     const sendBtn = document.getElementById('sendBtn');
     const prdContent = document.getElementById('prdContent');
     const prdPreview = document.getElementById('prdPreview');
-    const prdEditor = document.getElementById('prdEditor');
+    const prdEditorMount = document.getElementById('prdEditorMount');
+    let prdEditorApi = null;
+    const prdEditorReady = import('./js/prd-codemirror.js?v=2').then((m) => {
+      prdEditorApi = m;
+      m.init(prdEditorMount, {
+        onChange(text) { editDirty = text !== editBaseline; },
+      });
+      m.setVisible(false);
+      return m;
+    }).catch((e) => {
+      console.error('PRD editor failed to load:', e);
+      showToast('Markdown 编辑器加载失败，请刷新或检查网络', 'error');
+      throw e;
+    });
+
+    function getPrdEditorText() {
+      return prdEditorApi ? prdEditorApi.getText() : '';
+    }
+    function setPrdEditorText(text) {
+      if (prdEditorApi) prdEditorApi.setText(text);
+    }
+    function showPrdEditor(visible, readOnly) {
+      if (!prdEditorMount) return;
+      prdEditorMount.style.display = visible ? 'block' : 'none';
+      if (prdEditorApi) {
+        prdEditorApi.setVisible(visible);
+        if (visible) prdEditorApi.setReadOnly(!!readOnly);
+      }
+    }
     const prdPlaceholder = document.getElementById('prdPlaceholder');
     const prdTitle = document.getElementById('prdTitle');
     const sessionTitle = document.getElementById('sessionTitle');
@@ -1204,7 +1233,7 @@
     function loadEditorContent(s) {
       const ver = PrdForge.PrdVersions.getVersion(s, selectedVersion);
       const text = ver ? ver.content : s.prd;
-      prdEditor.value = text;
+      setPrdEditorText(text);
       editBaseline = text;
       editDirty = false;
     }
@@ -1218,10 +1247,19 @@
       const isPreview = prdViewMode === 'preview';
       const isSource = prdViewMode === 'source';
       prdPreview.style.display = isPreview && content ? 'block' : 'none';
-      prdContent.style.display = isSource && content ? 'block' : 'none';
-      prdEditor.style.display = prdViewMode === 'edit' ? 'block' : 'none';
+      if (isSource && content) {
+        prdContent.style.display = 'none';
+        showPrdEditor(true, true);
+        setPrdEditorText(display);
+      } else if (prdViewMode === 'edit') {
+        prdContent.style.display = 'none';
+        showPrdEditor(true, false);
+        setPrdEditorText(content || s.prd || '');
+      } else {
+        prdContent.style.display = 'none';
+        showPrdEditor(false);
+      }
       diffView.classList.toggle('visible', prdViewMode === 'review');
-      if (prdViewMode === 'edit') prdEditor.value = content || s.prd || '';
     }
 
     function canRollbackTo(targetV) {
@@ -1574,7 +1612,7 @@
         prdPreview.innerHTML = '';
         prdPreview.style.display = 'none';
         prdContent.style.display = streaming ? 'block' : 'none';
-        prdEditor.style.display = 'none';
+        showPrdEditor(false);
         diffView.classList.remove('visible');
         reviewBar.classList.remove('visible');
         prdPlaceholder.style.display = streaming ? 'none' : 'block';
@@ -1593,7 +1631,7 @@
       if (!hasContent) {
         prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
-        prdEditor.style.display = 'none';
+        showPrdEditor(false);
         diffView.classList.remove('visible');
         prdPlaceholder.style.display = 'block';
         updateRollbackButton();
@@ -1611,7 +1649,7 @@
       if (prdViewMode === 'review' && pendingReview) {
         prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
-        prdEditor.style.display = 'none';
+        showPrdEditor(false);
         prdPlaceholder.style.display = 'none';
         diffView.classList.add('visible');
         const reviewKey = reviewBaseV + '->' + reviewNewV;
@@ -1623,7 +1661,7 @@
         prdPreview.style.display = 'none';
         prdContent.style.display = 'none';
         diffView.classList.remove('visible');
-        prdEditor.style.display = 'block';
+        showPrdEditor(true, false);
         prdPlaceholder.style.display = 'none';
         if (!editDirty) loadEditorContent(s);
       } else {
@@ -1847,7 +1885,7 @@
         setPrdViewMode('preview');
         return;
       }
-      const text = prdEditor.value.trim();
+      const text = getPrdEditorText().trim();
       if (!text) { showToast('内容不能为空', 'error'); return; }
       s.prd = text;
       s.updatedAt = Date.now();
@@ -1869,7 +1907,7 @@
 
     function getExportablePrdText(s) {
       if (!s) return '';
-      if (prdViewMode === 'edit') return prdEditor.value;
+      if (prdViewMode === 'edit') return getPrdEditorText();
       if (prdViewMode === 'review' && pendingReview) {
         return PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions);
       }
@@ -1930,9 +1968,6 @@
       editDirty = false;
       setPrdViewMode('preview');
     });
-    prdEditor.addEventListener('input', () => {
-      editDirty = prdEditor.value !== editBaseline;
-    });
     document.addEventListener('keydown', (e) => {
       if (prdViewMode === 'review' && pendingReview) {
         if (e.key === 'ArrowDown' || (e.key === 'j' && !e.metaKey && !e.ctrlKey && !e.altKey)) {
@@ -1960,6 +1995,7 @@
     async function init() {
       const authSession = await PrdForge.requireAuth();
       if (!authSession) return;
+      await prdEditorReady;
       await PrdForge.renderAuthHeader('headerAuth');
 
       backLink.href = INDEX_HREF;
