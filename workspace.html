@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PRD Forge - 工作台</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Caveat:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -307,6 +308,12 @@
       padding: 6px 8px; border-radius: var(--radius-paper);
       white-space: pre-wrap;
     }
+    .diff-chosen {
+      font-family: var(--font-note); font-size: 14px; line-height: 1.7;
+      color: var(--ink-mid); background: rgba(90,122,85,0.08);
+      padding: 6px 8px; border-radius: var(--radius-paper);
+      white-space: pre-wrap; display: none;
+    }
     .diff-equal-text {
       font-family: var(--font-note); font-size: 15px; line-height: 1.85;
       color: var(--ink-mid); white-space: pre-wrap;
@@ -325,11 +332,16 @@
     }
     .diff-hunk.confirmed .hunk-status { display: block; }
     .diff-hunk.confirmed .diff-hunk-actions { display: none; }
-    .diff-hunk.confirmed .diff-custom-input { display: none !important; }
+    .diff-hunk.confirmed .diff-old,
+    .diff-hunk.confirmed .diff-new { display: none; }
+    .diff-hunk.confirmed:not(.choice-remove) .diff-chosen { display: block; }
+    .diff-hunk.confirmed .diff-custom-wrap { display: none !important; }
+    .diff-custom-wrap { margin-top: 8px; }
     .diff-custom-input {
-      width: 100%; margin-top: 8px; min-height: 60px; padding: 8px 10px;
+      display: block; width: 100%; box-sizing: border-box;
+      min-height: 180px; padding: 10px 12px;
       border: 1px dashed var(--paper-border); border-radius: var(--radius-paper);
-      font-family: var(--font-note); font-size: 14px; line-height: 1.6;
+      font-family: var(--font-note); font-size: 14px; line-height: 1.7;
       color: var(--ink-mid); background: rgba(245,237,214,0.5); resize: vertical;
     }
     .diff-apply-bar {
@@ -1050,6 +1062,10 @@
       prdViewMode = 'preview';
       pendingReview = false;
       selectedVersion = null;
+      if (s.status === 'generating' && !generating) {
+        s.status = s.prd && s.prd.length ? 'done' : 'error';
+      }
+      syncChatComposerState();
       listView.classList.add('hidden');
       detailView.classList.remove('hidden');
       backLink.textContent = '← 历史列表';
@@ -1459,12 +1475,25 @@
       if (reviewNextBtn) reviewNextBtn.disabled = !pending.length;
     }
 
+    function resolveHunkChoiceText(hunk, choice, customText) {
+      if (choice === 'new') return hunk.newText || '';
+      if (choice === 'old') return hunk.oldText || '';
+      if (choice === 'custom') return customText != null ? customText : '';
+      return '';
+    }
+
     function setHunkDecision(el, hunk, choice, customText) {
-      if (choice === 'new') diffDecisions[hunk.id] = { choice: 'new', text: hunk.newText || '' };
+      if (choice === 'custom') {
+        const input = el.querySelector('.diff-custom-input');
+        const text = input ? input.value : (customText != null ? customText : '');
+        diffDecisions[hunk.id] = { choice: 'custom', text };
+      } else if (choice === 'new') diffDecisions[hunk.id] = { choice: 'new', text: hunk.newText || '' };
       else if (choice === 'old') diffDecisions[hunk.id] = { choice: 'old', text: hunk.oldText || '' };
       else if (choice === 'remove') diffDecisions[hunk.id] = { choice: 'remove', text: '' };
-      else if (choice === 'custom') diffDecisions[hunk.id] = { choice: 'custom', text: customText || '' };
       el.classList.add('confirmed');
+      el.classList.toggle('choice-remove', choice === 'remove');
+      const chosen = el.querySelector('.diff-chosen');
+      if (chosen) chosen.textContent = resolveHunkChoiceText(hunk, choice, diffDecisions[hunk.id]?.text);
       const status = el.querySelector('.hunk-status');
       if (status) status.textContent = '✓ 已确认 · ' + (CHOICE_LABELS[choice] || choice);
       const customWrap = el.querySelector('.diff-custom-wrap');
@@ -1500,14 +1529,18 @@
             const choice = btn.dataset.choice;
             if (choice === 'custom') {
               if (customWrap) customWrap.style.display = 'block';
-              customInput?.focus();
+              if (customInput) {
+                customInput.style.height = 'auto';
+                customInput.style.height = Math.max(180, customInput.scrollHeight + 4) + 'px';
+                customInput.focus();
+              }
               return;
             }
             setHunkDecision(el, hunk, choice);
           });
         });
         el.querySelector('[data-confirm-custom]')?.addEventListener('click', () => {
-          setHunkDecision(el, hunk, 'custom', customInput?.value || '');
+          setHunkDecision(el, hunk, 'custom');
         });
       });
       updateReviewProgress();
@@ -1527,13 +1560,14 @@
           <div class="diff-hunk-label">修改</div>
           <div class="diff-old">${escapeHtml(h.oldText)}</div>
           <div class="diff-new">${escapeHtml(h.newText)}</div>
+          <div class="diff-chosen"></div>
           <div class="diff-hunk-actions">
             <button type="button" class="sketch-btn" data-choice="new">采纳新版</button>
             <button type="button" class="sketch-btn" data-choice="old">保留旧版</button>
             <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
           </div>
           <div class="diff-custom-wrap" style="display:none">
-            <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+            <textarea class="diff-custom-input" rows="10" placeholder="输入合并后的内容…"></textarea>
             <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
           </div>
           <div class="hunk-status"></div>
@@ -1543,13 +1577,14 @@
         return `<div class="diff-hunk add" data-id="${h.id}">
           <div class="diff-hunk-label">新增</div>
           <div class="diff-new">${escapeHtml(h.newText)}</div>
+          <div class="diff-chosen"></div>
           <div class="diff-hunk-actions">
             <button type="button" class="sketch-btn" data-choice="new">采纳</button>
             <button type="button" class="sketch-btn" data-choice="remove">忽略</button>
             <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
           </div>
           <div class="diff-custom-wrap" style="display:none">
-            <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+            <textarea class="diff-custom-input" rows="10" placeholder="输入合并后的内容…"></textarea>
             <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
           </div>
           <div class="hunk-status"></div>
@@ -1558,13 +1593,14 @@
       return `<div class="diff-hunk remove" data-id="${h.id}">
         <div class="diff-hunk-label">删除</div>
         <div class="diff-old">${escapeHtml(h.oldText)}</div>
+        <div class="diff-chosen"></div>
         <div class="diff-hunk-actions">
           <button type="button" class="sketch-btn" data-choice="remove">确认删除</button>
           <button type="button" class="sketch-btn" data-choice="old">保留原文</button>
           <button type="button" class="sketch-btn" data-choice="custom">自定义编辑</button>
         </div>
         <div class="diff-custom-wrap" style="display:none">
-          <textarea class="diff-custom-input" placeholder="输入合并后的内容…"></textarea>
+          <textarea class="diff-custom-input" rows="10" placeholder="输入合并后的内容…"></textarea>
           <button type="button" class="sketch-btn" data-confirm-custom style="margin-top:8px">确认自定义</button>
         </div>
         <div class="hunk-status"></div>
@@ -1588,6 +1624,7 @@
       if (!base) return;
       if (!confirm('忽略 v' + reviewNewV + ' 的新生成内容，保留 v' + reviewBaseV + ' 作为当前 PRD？')) return;
       s.prd = base.content;
+      s.status = 'done';
       s.updatedAt = Date.now();
       PrdForge.PrdVersions.ignoreVersion(s, reviewNewV, '第' + reviewNewV + '轮生成（已忽略）');
       selectedVersion = reviewBaseV;
@@ -1601,7 +1638,9 @@
       });
       await persistCurrent();
       renderMessages();
+      syncChatComposerState();
       renderPrd();
+      renderSessionListPage();
       showToast('已忽略 v' + reviewNewV + '，保留 v' + reviewBaseV, 'success');
     }
 
@@ -1616,6 +1655,7 @@
       });
       const merged = PrdForge.PrdVersions.buildMergedText(currentHunks, diffDecisions);
       s.prd = merged;
+      s.status = 'done';
       s.updatedAt = Date.now();
       const entry = PrdForge.PrdVersions.confirmVersion(s, reviewNewV, merged, '第' + reviewNewV + '轮生成（已确认）');
       if (entry) entry.messageCount = s.messages.length;
@@ -1624,7 +1664,9 @@
       prdViewMode = 'preview';
       delete diffView.dataset.reviewKey;
       await persistCurrent();
+      syncChatComposerState();
       renderPrd();
+      renderSessionListPage();
       showToast('v' + reviewNewV + ' 已确认', 'success');
     }
 
@@ -1652,6 +1694,10 @@
       saveEditBtn.style.display = prdViewMode === 'edit' && hasContent ? 'inline-block' : 'none';
 
       if (s.status === 'generating') {
+        if (!generating) {
+          s.status = s.prd && s.prd.length ? 'done' : 'error';
+          syncChatComposerState();
+        } else {
         prdTitle.innerHTML = '<span class="dot warm"></span> 正在生成…';
         const streaming = s.prd || '';
         prdContent.textContent = streaming;
@@ -1664,6 +1710,7 @@
         prdPlaceholder.style.display = streaming ? 'none' : 'block';
         if (rollbackVersionBtn) rollbackVersionBtn.style.display = 'none';
         return;
+        }
       }
       if (s.status === 'error') {
         prdTitle.innerHTML = '<span class="dot err"></span> 生成失败';
@@ -1751,6 +1798,7 @@
       renderPrd();
       addTypingBubble(statusMsg || '正在生成 PRD，请稍候…');
 
+      try {
       const cfg = session.config;
       const fd = new FormData();
       fd.append('text', userText || PrdForge.PrdVersions.activeMessages(session).filter(m => m.role === 'user').map(m => m.content).join('\n\n'));
@@ -1855,6 +1903,12 @@
       }
       renderSessionListPage();
       showToast('PRD 生成成功！', 'success');
+      } finally {
+        syncChatComposerState();
+      }
+    }
+
+    function syncChatComposerState() {
       resetSendBtn();
     }
 
@@ -1878,7 +1932,6 @@
         renderSessionListPage();
       });
       showToast(msg, 'error');
-      resetSendBtn();
     }
 
     let typingEl = null;
