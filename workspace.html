@@ -276,6 +276,12 @@
       outline: none; height: auto; min-height: 300px; background: transparent;
     }
     .prd-editor-mount .cm-scroller { font-family: var(--font-note); }
+    .prd-editor-fallback {
+      width: 100%; min-height: 300px; padding: 0;
+      border: none; outline: none; resize: vertical;
+      font-family: var(--font-note); font-size: 15px; line-height: 1.85;
+      color: var(--ink-mid); background: transparent;
+    }
     .diff-view { display: none; flex-direction: column; gap: 12px; }
     .diff-view.visible { display: flex; }
     .diff-hunk {
@@ -594,6 +600,7 @@
         <div class="prd-preview" id="prdPreview"></div>
         <pre class="prd-content" id="prdContent" style="display:none"></pre>
         <div class="prd-editor-mount" id="prdEditorMount" style="display:none"></div>
+        <textarea class="prd-editor-fallback" id="prdEditorFallback" style="display:none" rows="20" spellcheck="false"></textarea>
         <div class="diff-view" id="diffView"></div>
         <div class="prd-placeholder" id="prdPlaceholder">PRD 文档将在这里实时生成</div>
       </div>
@@ -919,32 +926,71 @@
     const prdContent = document.getElementById('prdContent');
     const prdPreview = document.getElementById('prdPreview');
     const prdEditorMount = document.getElementById('prdEditorMount');
+    const prdEditorFallback = document.getElementById('prdEditorFallback');
     let prdEditorApi = null;
-    const prdEditorReady = import('./js/prd-codemirror.js?v=2').then((m) => {
-      prdEditorApi = m;
-      m.init(prdEditorMount, {
-        onChange(text) { editDirty = text !== editBaseline; },
+    let prdEditorUseFallback = false;
+    let prdEditorLoadStarted = false;
+    let pendingEditorText = null;
+
+    function startPrdEditorLoad() {
+      if (prdEditorLoadStarted) return;
+      prdEditorLoadStarted = true;
+      import('./js/prd-codemirror.js?v=3').then((m) => {
+        prdEditorApi = m;
+        m.init(prdEditorMount, {
+          onChange(text) { editDirty = text !== editBaseline; },
+        });
+        m.setVisible(false);
+        const text = pendingEditorText ?? (prdEditorFallback?.value || '');
+        if (text) m.setText(text);
+        const onFallback = prdEditorFallback && prdEditorFallback.style.display !== 'none';
+        if (onFallback && (prdViewMode === 'edit' || prdViewMode === 'source')) {
+          prdEditorFallback.style.display = 'none';
+          prdEditorMount.style.display = 'block';
+          m.setVisible(true);
+          m.setReadOnly(prdViewMode === 'source');
+          if (prdViewMode === 'source') prdContent.style.display = 'none';
+        }
+      }).catch((e) => {
+        console.error('PRD editor failed to load:', e);
+        prdEditorUseFallback = true;
       });
-      m.setVisible(false);
-      return m;
-    }).catch((e) => {
-      console.error('PRD editor failed to load:', e);
-      showToast('Markdown 编辑器加载失败，请刷新或检查网络', 'error');
-      throw e;
-    });
+    }
 
     function getPrdEditorText() {
-      return prdEditorApi ? prdEditorApi.getText() : '';
+      if (prdEditorApi && !prdEditorUseFallback) return prdEditorApi.getText();
+      if (prdEditorFallback && prdEditorFallback.style.display !== 'none') return prdEditorFallback.value;
+      return pendingEditorText || '';
     }
     function setPrdEditorText(text) {
-      if (prdEditorApi) prdEditorApi.setText(text);
+      pendingEditorText = text ?? '';
+      if (prdEditorApi && !prdEditorUseFallback) prdEditorApi.setText(pendingEditorText);
+      if (prdEditorFallback) prdEditorFallback.value = pendingEditorText;
     }
     function showPrdEditor(visible, readOnly) {
       if (!prdEditorMount) return;
-      prdEditorMount.style.display = visible ? 'block' : 'none';
-      if (prdEditorApi) {
-        prdEditorApi.setVisible(visible);
-        if (visible) prdEditorApi.setReadOnly(!!readOnly);
+      if (!visible) {
+        prdEditorMount.style.display = 'none';
+        if (prdEditorFallback) prdEditorFallback.style.display = 'none';
+        if (prdEditorApi) prdEditorApi.setVisible(false);
+        return;
+      }
+      startPrdEditorLoad();
+      const useCm = prdEditorApi && !prdEditorUseFallback;
+      if (useCm) {
+        prdEditorMount.style.display = 'block';
+        if (prdEditorFallback) prdEditorFallback.style.display = 'none';
+        prdEditorApi.setVisible(true);
+        prdEditorApi.setReadOnly(!!readOnly);
+        return;
+      }
+      prdEditorMount.style.display = 'none';
+      if (prdEditorApi) prdEditorApi.setVisible(false);
+      if (readOnly) {
+        if (prdEditorFallback) prdEditorFallback.style.display = 'none';
+      } else if (prdEditorFallback) {
+        prdEditorFallback.style.display = 'block';
+        if (pendingEditorText != null) prdEditorFallback.value = pendingEditorText;
       }
     }
     const prdPlaceholder = document.getElementById('prdPlaceholder');
@@ -1248,9 +1294,9 @@
       const isSource = prdViewMode === 'source';
       prdPreview.style.display = isPreview && content ? 'block' : 'none';
       if (isSource && content) {
-        prdContent.style.display = 'none';
         showPrdEditor(true, true);
         setPrdEditorText(display);
+        prdContent.style.display = (prdEditorUseFallback || !prdEditorApi) ? 'block' : 'none';
       } else if (prdViewMode === 'edit') {
         prdContent.style.display = 'none';
         showPrdEditor(true, false);
@@ -1968,6 +2014,9 @@
       editDirty = false;
       setPrdViewMode('preview');
     });
+    prdEditorFallback.addEventListener('input', () => {
+      editDirty = prdEditorFallback.value !== editBaseline;
+    });
     document.addEventListener('keydown', (e) => {
       if (prdViewMode === 'review' && pendingReview) {
         if (e.key === 'ArrowDown' || (e.key === 'j' && !e.metaKey && !e.ctrlKey && !e.altKey)) {
@@ -1995,7 +2044,7 @@
     async function init() {
       const authSession = await PrdForge.requireAuth();
       if (!authSession) return;
-      await prdEditorReady;
+      startPrdEditorLoad();
       await PrdForge.renderAuthHeader('headerAuth');
 
       backLink.href = INDEX_HREF;
