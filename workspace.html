@@ -43,7 +43,10 @@
     .header-title {
       flex: 1; text-align: center; font-family: var(--font-note);
       font-size: 18px; font-weight: 600; color: var(--ink-mid);
+      cursor: default;
     }
+    .header-title.editable { cursor: text; }
+    .header-title.editable:hover { color: var(--accent-orange); }
     .workspace {
       flex: 1; display: grid; grid-template-columns: 380px 1fr;
       min-height: 0; overflow: hidden;
@@ -388,7 +391,17 @@
       font-family: var(--font-note); font-size: 17px; font-weight: 600;
       color: var(--ink-dark); line-height: 1.3;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+      cursor: text;
     }
+    .session-item-title:hover { color: var(--accent-orange); }
+    .session-title-input, .header-title-input {
+      width: 100%; box-sizing: border-box;
+      font-family: var(--font-note); font-weight: 600; color: var(--ink-dark);
+      border: 1px dashed var(--accent-orange); border-radius: var(--radius-paper);
+      padding: 2px 6px; background: var(--paper-card); outline: none;
+    }
+    .session-title-input { font-size: 17px; min-width: 0; }
+    .header-title-input { font-size: 18px; text-align: center; }
     .session-item-time { font-size: 12px; color: var(--ink-faint); flex-shrink: 0; font-family: var(--font-body); }
     .session-item-preview {
       font-family: var(--font-body); font-size: 13px; color: var(--ink-light);
@@ -415,6 +428,16 @@
     .session-delete-btn:hover {
       color: #a03020; border-color: rgba(160,48,32,0.45);
       background: rgba(160,48,32,0.06);
+    }
+    .session-rename-btn {
+      font-family: var(--font-note); font-size: 12px; padding: 2px 8px;
+      border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper);
+      background: transparent; color: var(--ink-faint); cursor: pointer;
+      transition: all var(--transition-ink); flex-shrink: 0;
+    }
+    .session-rename-btn:hover {
+      color: var(--accent-orange); border-color: rgba(212,116,42,0.45);
+      background: rgba(212,116,42,0.06);
     }
     .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
     .toast {
@@ -1050,6 +1073,9 @@
       backLink.href = INDEX_HREF;
       backLink.onclick = null;
       sessionTitle.textContent = '历史记录';
+      sessionTitle.classList.remove('editable');
+      sessionTitle.title = '';
+      sessionTitle.ondblclick = null;
       updateUrl(null);
       renderSessionListPage();
     }
@@ -1071,10 +1097,109 @@
       backLink.textContent = '← 历史列表';
       backLink.href = '#list';
       backLink.onclick = (e) => { e.preventDefault(); showListView(); };
-      sessionTitle.textContent = s.title || 'PRD 工作台';
+      syncSessionTitleDisplay(s);
+      sessionTitle.ondblclick = (e) => {
+        e.preventDefault();
+        startHeaderTitleEdit();
+      };
       updateUrl(id);
       renderMessages();
       renderPrd();
+    }
+
+    async function persistSession(session) {
+      if (!session || !session.id) return;
+      try {
+        await PrdForge.SessionStore.save(session);
+      } catch (e) {
+        showToast('保存失败：' + e.message, 'error');
+        throw e;
+      }
+    }
+
+    async function persistCurrent() {
+      await persistSession(getCurrent());
+    }
+
+    function normalizeSessionTitle(text) {
+      const title = (text || '').trim().slice(0, 48);
+      return title || '新需求';
+    }
+
+    function syncSessionTitleDisplay(session) {
+      if (!session) return;
+      const title = session.title || '新需求';
+      if (viewMode === 'detail' && currentId === session.id) {
+        sessionTitle.textContent = title;
+        sessionTitle.classList.add('editable');
+        sessionTitle.title = '双击重命名';
+      }
+    }
+
+    function beginSessionTitleEdit(session, container, { inputClass, onDone }) {
+      if (!session || !container || container.querySelector('input')) return;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = inputClass;
+      input.value = session.title || '';
+      input.maxLength = 48;
+      input.placeholder = '输入标题';
+      const previous = container.textContent;
+      container.textContent = '';
+      container.appendChild(input);
+      input.focus();
+      input.select();
+
+      let finished = false;
+      const finish = async (save) => {
+        if (finished) return;
+        finished = true;
+        if (save) {
+          const next = normalizeSessionTitle(input.value);
+          if (next !== (session.title || '')) {
+            session.title = next;
+            session.updatedAt = Date.now();
+            try {
+              await persistSession(session);
+              showToast('标题已更新', 'success');
+            } catch {
+              container.textContent = previous;
+              onDone?.();
+              return;
+            }
+          }
+        }
+        container.textContent = save ? (session.title || '新需求') : previous;
+        onDone?.();
+        syncSessionTitleDisplay(session);
+        if (viewMode === 'list') renderSessionListPage();
+      };
+
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+    }
+
+    function startListTitleEdit(id, titleEl) {
+      const s = sessions.find(x => x.id === id);
+      if (!s) return;
+      beginSessionTitleEdit(s, titleEl, { inputClass: 'session-title-input' });
+    }
+
+    function startHeaderTitleEdit() {
+      const s = getCurrent();
+      if (!s || viewMode !== 'detail') return;
+      beginSessionTitleEdit(s, sessionTitle, {
+        inputClass: 'header-title-input',
+        onDone: () => {
+          sessionTitle.classList.add('editable');
+          sessionTitle.title = '双击重命名';
+        }
+      });
     }
 
     function renderSessionListPage() {
@@ -1088,13 +1213,14 @@
         const rounds = (s.messages || []).filter(m => m.role === 'user').length;
         return `<article class="session-item" data-id="${s.id}" tabindex="0" role="button">
           <div class="session-item-head">
-            <div class="session-item-title">${escapeHtml(s.title || '未命名')}</div>
+            <div class="session-item-title" title="双击重命名">${escapeHtml(s.title || '未命名')}</div>
             <div class="session-item-time">${formatTime(s.updatedAt || s.createdAt)}</div>
           </div>
           <div class="session-item-preview">${escapeHtml(sessionPreview(s))}</div>
           <div class="session-item-meta">
             <span class="session-status ${escapeHtml(s.status || 'pending')}">${statusLabel(s.status)}</span>
             <span class="session-item-count">${rounds} 轮对话${s.prd ? ' · ' + s.prd.length + ' 字' : ''}</span>
+            <button type="button" class="session-rename-btn" data-rename-id="${s.id}" title="重命名">重命名</button>
             <button type="button" class="session-delete-btn" data-delete-id="${s.id}" title="删除此记录" aria-label="删除">删除</button>
           </div>
         </article>`;
@@ -1105,6 +1231,22 @@
         el.addEventListener('click', () => openSession(id));
         el.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSession(id); }
+        });
+      });
+      sessionListEl.querySelectorAll('.session-item-title').forEach(el => {
+        const id = el.closest('.session-item')?.dataset.id;
+        if (!id) return;
+        el.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          startListTitleEdit(id, el);
+        });
+      });
+      sessionListEl.querySelectorAll('.session-rename-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const el = btn.closest('.session-item')?.querySelector('.session-item-title');
+          if (el) startListTitleEdit(btn.dataset.renameId, el);
         });
       });
       sessionListEl.querySelectorAll('.session-delete-btn').forEach(btn => {
@@ -1134,16 +1276,6 @@
         renderSessionListPage();
       }
       showToast('已删除', 'success');
-    }
-
-    async function persistCurrent() {
-      const s = getCurrent();
-      if (!s || !s.id) return;
-      try {
-        await PrdForge.SessionStore.save(s);
-      } catch (e) {
-        showToast('保存失败：' + e.message, 'error');
-      }
     }
 
     function getCurrent() { return sessions.find(s => s.id === currentId); }
@@ -1182,7 +1314,7 @@
         messageList.appendChild(div);
       });
       messageList.scrollTop = messageList.scrollHeight;
-      sessionTitle.textContent = s.title || 'PRD 工作台';
+      syncSessionTitleDisplay(s);
     }
 
     function renderVersionStrip(s) {
@@ -1955,6 +2087,26 @@
       else document.getElementById('typingBubble')?.remove();
     }
 
+    function buildGeneratePrompt(session) {
+      const userMsgs = PrdForge.PrdVersions.activeMessages(session).filter(m => m.role === 'user');
+      if (!userMsgs.length) return '';
+      const parts = [];
+      if (userMsgs.length === 1) {
+        parts.push('【用户需求】\n' + userMsgs[0].content);
+      } else {
+        const history = userMsgs.slice(0, -1);
+        const latest = userMsgs[userMsgs.length - 1];
+        const historyBlock = history.map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
+        parts.push('【历史需求（参考；若与本轮冲突，以本轮为准）】\n' + historyBlock);
+        parts.push('【本轮新增诉求（最高优先级，必须优先落实）】\n' + latest.content);
+      }
+      const prd = session.prd || '';
+      if (prd) {
+        parts.push('【当前 PRD 草稿（在本轮诉求指导下增量修改；与本轮冲突处以本轮为准）】\n' + prd);
+      }
+      return parts.join('\n\n');
+    }
+
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
@@ -1968,8 +2120,7 @@
       await persistCurrent();
       renderMessages();
 
-      const context = PrdForge.PrdVersions.activeMessages(s).filter(m => m.role === 'user').map((m, i) => `【第${i + 1}轮需求】\n${m.content}`).join('\n\n');
-      const prompt = context + (s.prd ? '\n\n【当前 PRD 草稿，请在此基础上修改】\n' + s.prd : '');
+      const prompt = buildGeneratePrompt(s);
       const prevPrd = s.prd;
       if (prevPrd) s._prdBackup = prevPrd;
       await runGenerate(s, prompt, '已收到补充，正在重新生成 PRD…');
