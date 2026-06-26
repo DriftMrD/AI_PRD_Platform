@@ -37,13 +37,13 @@ const paperHighlight = HighlightStyle.define([
 const paperTheme = EditorView.theme({
   '&': {
     fontSize: '15px',
-    fontFamily: "'Caveat', 'Ma Shan Zheng', 'Noto Sans SC', cursive, sans-serif",
+    fontFamily: "'Noto Sans SC', system-ui, sans-serif",
     backgroundColor: 'transparent',
   },
   '.cm-content': {
     caretColor: '#2c1a0e',
     padding: '4px 0',
-    lineHeight: '1.85',
+    lineHeight: '1.75',
     color: '#5c3d1e',
     minHeight: '280px',
   },

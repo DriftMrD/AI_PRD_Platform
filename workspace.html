@@ -40,13 +40,31 @@
       padding: 4px 12px; border-radius: var(--radius-paper);
     }
     .back-link:hover { background: rgba(44,26,14,0.04); color: var(--ink-dark); }
+    .header-title-wrap {
+      flex: 1; min-width: 0;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
     .header-title {
-      flex: 1; text-align: center; font-family: var(--font-note);
-      font-size: 18px; font-weight: 600; color: var(--ink-mid);
-      cursor: default;
+      min-width: 0; max-width: 100%;
+      font-family: var(--font-note); font-size: 18px; font-weight: 600;
+      color: var(--ink-mid); cursor: default;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .header-title.editable { cursor: text; }
     .header-title.editable:hover { color: var(--accent-orange); }
+    .header-title-edit {
+      flex-shrink: 0; width: 28px; height: 28px; padding: 0;
+      border: 1px solid var(--paper-border-lt); border-radius: var(--radius-paper);
+      background: transparent; color: var(--ink-faint); cursor: pointer;
+      font-family: var(--font-note); font-size: 14px; line-height: 1;
+      display: none; align-items: center; justify-content: center;
+      transition: all var(--transition-ink);
+    }
+    .header-title-edit.visible { display: inline-flex; }
+    .header-title-edit:hover {
+      color: var(--accent-orange); border-color: rgba(212,116,42,0.45);
+      background: rgba(212,116,42,0.06);
+    }
     .workspace {
       flex: 1; display: grid; grid-template-columns: 380px 1fr;
       min-height: 0; overflow: hidden;
@@ -213,7 +231,7 @@
     .review-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .prd-body {
       flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
-      padding: 20px 24px 32px;
+      padding: 20px 24px 32px; position: relative;
       -webkit-overflow-scrolling: touch;
     }
     .prd-content {
@@ -279,11 +297,11 @@
     .prd-editor-mount .cm-editor {
       outline: none; height: auto; min-height: 300px; background: transparent;
     }
-    .prd-editor-mount .cm-scroller { font-family: var(--font-note); }
+    .prd-editor-mount .cm-scroller { font-family: var(--font-body); line-height: 1.75; }
     .prd-editor-fallback {
       width: 100%; min-height: 300px; padding: 0;
       border: none; outline: none; resize: vertical;
-      font-family: var(--font-note); font-size: 15px; line-height: 1.85;
+      font-family: var(--font-body); font-size: 15px; line-height: 1.75;
       color: var(--ink-mid); background: transparent;
     }
     .diff-view { display: none; flex-direction: column; gap: 12px; }
@@ -353,9 +371,11 @@
       display: flex; gap: 8px; justify-content: flex-end;
     }
     .edit-action-bar {
-      display: none; padding: 10px 20px; gap: 8px; align-items: center;
+      display: none; padding: 10px 24px; gap: 8px; align-items: center;
+      position: absolute; top: 0; left: 0; right: 0; z-index: 5;
       border-bottom: 1px dotted var(--paper-border-lt);
-      background: rgba(212,116,42,0.06); flex-shrink: 0;
+      background: rgba(250,244,228,0.96); flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(44,26,14,0.06);
     }
     .edit-action-bar.visible { display: flex; }
     .edit-hint {
@@ -401,7 +421,7 @@
       padding: 2px 6px; background: var(--paper-card); outline: none;
     }
     .session-title-input { font-size: 17px; min-width: 0; }
-    .header-title-input { font-size: 18px; text-align: center; }
+    .header-title-input { font-size: 18px; text-align: center; min-width: 160px; max-width: min(480px, 70vw); }
     .session-item-time { font-size: 12px; color: var(--ink-faint); flex-shrink: 0; font-family: var(--font-body); }
     .session-item-preview {
       font-family: var(--font-body); font-size: 13px; color: var(--ink-light);
@@ -563,7 +583,10 @@
 <body>
   <header class="header">
     <a href="index.html" class="back-link" id="backLink">← 新建需求</a>
-    <div class="header-title" id="sessionTitle">历史记录</div>
+    <div class="header-title-wrap">
+      <div class="header-title" id="sessionTitle">历史记录</div>
+      <button type="button" class="header-title-edit" id="sessionTitleEditBtn" title="重命名" aria-label="重命名">✎</button>
+    </div>
     <div class="header-auth" id="headerAuth"></div>
   </header>
 
@@ -626,12 +649,12 @@
           <button type="button" class="sketch-btn primary" id="finishReviewBtn">完成确认</button>
         </div>
       </div>
-      <div class="edit-action-bar" id="editActionBar">
-        <span class="edit-hint">编辑模式 · ⌘S / Ctrl+S 保存</span>
-        <button type="button" class="sketch-btn" id="cancelEditBtn">取消</button>
-        <button type="button" class="sketch-btn primary" id="saveEditBarBtn">保存编辑</button>
-      </div>
       <div class="prd-body">
+        <div class="edit-action-bar" id="editActionBar">
+          <span class="edit-hint">编辑模式 · ⌘S / Ctrl+S 保存</span>
+          <button type="button" class="sketch-btn" id="cancelEditBtn">取消</button>
+          <button type="button" class="sketch-btn primary" id="saveEditBarBtn">保存编辑</button>
+        </div>
         <div class="prd-preview" id="prdPreview"></div>
         <pre class="prd-content" id="prdContent" style="display:none"></pre>
         <div class="prd-editor-mount" id="prdEditorMount" style="display:none"></div>
@@ -966,6 +989,7 @@
     let prdEditorUseFallback = false;
     let prdEditorLoadStarted = false;
     let pendingEditorText = null;
+    let pendingScrollRestore = null;
 
     function startPrdEditorLoad() {
       if (prdEditorLoadStarted) return;
@@ -985,6 +1009,7 @@
           m.setVisible(true);
           m.setReadOnly(prdViewMode === 'source');
           if (prdViewMode === 'source') prdContent.style.display = 'none';
+          restorePrdScrollAnchor(pendingScrollRestore);
         }
       }).catch((e) => {
         console.error('PRD editor failed to load:', e);
@@ -1031,6 +1056,11 @@
     const prdPlaceholder = document.getElementById('prdPlaceholder');
     const prdTitle = document.getElementById('prdTitle');
     const sessionTitle = document.getElementById('sessionTitle');
+    const sessionTitleEditBtn = document.getElementById('sessionTitleEditBtn');
+    sessionTitleEditBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      startHeaderTitleEdit();
+    });
     const prdToolbar = document.getElementById('prdToolbar');
     const versionStrip = document.getElementById('versionStrip');
     const diffView = document.getElementById('diffView');
@@ -1076,6 +1106,7 @@
       sessionTitle.classList.remove('editable');
       sessionTitle.title = '';
       sessionTitle.ondblclick = null;
+      if (sessionTitleEditBtn) sessionTitleEditBtn.classList.remove('visible');
       updateUrl(null);
       renderSessionListPage();
     }
@@ -1133,7 +1164,22 @@
         sessionTitle.textContent = title;
         sessionTitle.classList.add('editable');
         sessionTitle.title = '双击重命名';
+        if (sessionTitleEditBtn) sessionTitleEditBtn.classList.add('visible');
       }
+    }
+
+    function startHeaderTitleEdit() {
+      const s = getCurrent();
+      if (!s || viewMode !== 'detail') return;
+      if (sessionTitleEditBtn) sessionTitleEditBtn.classList.remove('visible');
+      beginSessionTitleEdit(s, sessionTitle, {
+        inputClass: 'header-title-input',
+        onDone: () => {
+          sessionTitle.classList.add('editable');
+          sessionTitle.title = '双击重命名';
+          if (sessionTitleEditBtn) sessionTitleEditBtn.classList.add('visible');
+        }
+      });
     }
 
     function beginSessionTitleEdit(session, container, { inputClass, onDone }) {
@@ -1188,18 +1234,6 @@
       const s = sessions.find(x => x.id === id);
       if (!s) return;
       beginSessionTitleEdit(s, titleEl, { inputClass: 'session-title-input' });
-    }
-
-    function startHeaderTitleEdit() {
-      const s = getCurrent();
-      if (!s || viewMode !== 'detail') return;
-      beginSessionTitleEdit(s, sessionTitle, {
-        inputClass: 'header-title-input',
-        onDone: () => {
-          sessionTitle.classList.add('editable');
-          sessionTitle.title = '双击重命名';
-        }
-      });
     }
 
     function renderSessionListPage() {
@@ -1381,6 +1415,7 @@
         }
       }
       if (mode !== 'edit') editDirty = false;
+      pendingScrollRestore = capturePrdScrollAnchor();
       prdViewMode = mode;
       document.querySelectorAll('.mode-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.mode === mode);
@@ -1389,6 +1424,7 @@
       editActionBar.classList.toggle('visible', mode === 'edit');
       saveEditBtn.style.display = mode === 'edit' ? 'inline-block' : 'none';
       renderPrd();
+      restorePrdScrollAnchor(pendingScrollRestore);
     }
 
     function renderMarkdown(text) {
@@ -1544,7 +1580,77 @@
     }
 
     function getPrdScroller() {
-      return diffView.closest('.prd-body');
+      return document.querySelector('.prd-body');
+    }
+
+    function capturePrdScrollAnchor() {
+      const scroller = getPrdScroller();
+      if (!scroller) return null;
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      if (max <= 0) return { type: 'ratio', ratio: 0 };
+
+      if (prdViewMode === 'preview' && prdPreview.style.display !== 'none') {
+        const rect = scroller.getBoundingClientRect();
+        const probeY = rect.top + 28;
+        const probeX = rect.left + Math.min(48, rect.width * 0.2);
+        const el = document.elementFromPoint(probeX, probeY);
+        const block = el?.closest('.prd-preview h1, .prd-preview h2, .prd-preview h3, .prd-preview h4, .prd-preview p, .prd-preview li, .prd-preview blockquote, .prd-preview pre, .prd-preview td, .prd-preview th');
+        if (block) {
+          const text = block.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+          if (text.length >= 4) return { type: 'text', text };
+        }
+      }
+      if ((prdViewMode === 'edit' || prdViewMode === 'source') && (prdEditorMount.style.display !== 'none' || prdEditorFallback.style.display !== 'none')) {
+        const content = getPrdEditorText();
+        const lineHeight = 15 * 1.75;
+        const lineNum = Math.floor(scroller.scrollTop / lineHeight);
+        const line = content.split('\n')[lineNum];
+        if (line) {
+          const text = line.replace(/\s+/g, ' ').trim().slice(0, 80);
+          if (text.length >= 4) return { type: 'text', text };
+        }
+      }
+      return { type: 'ratio', ratio: scroller.scrollTop / max };
+    }
+
+    function restorePrdScrollAnchor(anchor) {
+      if (!anchor) return;
+      const scroller = getPrdScroller();
+      if (!scroller) return;
+      const apply = () => {
+        if (anchor.type === 'text') {
+          if (prdViewMode === 'edit' || prdViewMode === 'source') {
+            const content = getPrdEditorText() || prdContent.textContent || '';
+            const needle = anchor.text.slice(0, 48);
+            const idx = content.indexOf(needle);
+            if (idx >= 0) {
+              const lineNum = content.slice(0, idx).split('\n').length - 1;
+              const lineHeight = 15 * 1.75;
+              scroller.scrollTop = Math.max(0, lineNum * lineHeight - 28);
+              pendingScrollRestore = null;
+              return;
+            }
+          }
+          if (prdViewMode === 'preview' && prdPreview.style.display !== 'none') {
+            const blocks = prdPreview.querySelectorAll('h1, h2, h3, h4, p, li, blockquote, pre, td, th');
+            const needle = anchor.text.slice(0, 48);
+            for (const block of blocks) {
+              const text = block.textContent.replace(/\s+/g, ' ').trim();
+              if (text.includes(needle)) {
+                const rect = scroller.getBoundingClientRect();
+                const blockRect = block.getBoundingClientRect();
+                scroller.scrollTop += blockRect.top - rect.top - 28;
+                pendingScrollRestore = null;
+                return;
+              }
+            }
+          }
+        }
+        const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        scroller.scrollTop = anchor.type === 'ratio' ? anchor.ratio * max : 0;
+        pendingScrollRestore = null;
+      };
+      requestAnimationFrame(() => requestAnimationFrame(apply));
     }
 
     function scrollElementIntoScroller(el) {
